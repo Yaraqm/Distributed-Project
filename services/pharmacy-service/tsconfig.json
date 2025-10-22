@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "esModuleInterop": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "rootDir": "../../",
+    "baseUrl": ".",
+    "outDir": "dist",
+    "allowImportingTsExtensions": true, // 👈 add it here
+    "noEmit": true
+  },
+  "include": ["src/**/*", "../../common/events/src/**/*"]
+}

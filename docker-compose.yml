@@ -1,0 +1,70 @@
+version: "3.9"
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: hms-rabbit
+    ports: ["5672:5672", "15672:15672"]
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+
+  cockroach:
+    image: cockroachdb/cockroach:v24.2.2
+    container_name: hms-crdb
+    command: start-single-node --insecure --http-addr=0.0.0.0:8080 --listen-addr=0.0.0.0:26257
+    ports: ["26257:26257", "8080:8080"]
+    volumes:
+      - crdb-data:/cockroach/cockroach-data
+
+  gateway:
+    build: ./gateway
+    container_name: hms-gateway
+    ports: ["8088:80"]
+    depends_on: [doctor-service, admin-service, lab-service, pharmacy-service]
+
+  doctor-service:
+    build: ./services/doctor-service
+    environment:
+      PORT: 4001
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672
+      DATABASE_URL: postgresql://root@cockroach:26257/hms?sslmode=disable
+    ports: ["4001:4001"]
+    depends_on: [rabbitmq, cockroach]
+
+  admin-service:
+    build: ./services/admin-service
+    environment:
+      PORT: 4002
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672
+      DATABASE_URL: postgresql://root@cockroach:26257/hms?sslmode=disable
+    ports: ["4002:4002"]
+    depends_on: [rabbitmq, cockroach]
+
+  lab-service:
+    build: ./services/lab-service
+    environment:
+      PORT: 4003
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672
+      DATABASE_URL: postgresql://root@cockroach:26257/hms?sslmode=disable
+    ports: ["4003:4003"]
+    depends_on: [rabbitmq, cockroach]
+
+  pharmacy-service:
+    build: ./services/pharmacy-service
+    environment:
+      PORT: 4004
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672
+      DATABASE_URL: postgresql://root@cockroach:26257/hms?sslmode=disable
+    ports: ["4004:4004"]
+    depends_on: [rabbitmq, cockroach]
+
+  web:
+    build: ./web
+    container_name: hms-web
+    ports: ["5173:5173"]
+    environment:
+      VITE_API_BASE: http://localhost:8088
+    depends_on: [gateway]
+
+volumes:
+  crdb-data:
