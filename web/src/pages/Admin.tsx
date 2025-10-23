@@ -1,25 +1,50 @@
-import { useState } from 'react'
-import { api } from '../lib/api'
+import { useState } from "react";
+import axios from "axios";
 
-export default function Admin(){
-  const [patientId, setPatientId] = useState('p-001')
-  const [room, setRoom] = useState('A101')
-  const [resp, setResp] = useState<any>(null)
+const api = axios.create({ baseURL: "http://localhost:4002" }); // admin-service
 
-  async function assign(){
-    const { data } = await api.post('/admin/rooms/assign', { patientId, room })
-    setResp(data)
+export default function Admin() {
+  const [doctorId, setDoctorId] = useState("d-123");
+  const [roomNumber, setRoomNumber] = useState("101A");
+  const [resp, setResp] = useState<any>(null);
+
+  async function assignRoom() {
+    const { data } = await api.post("/admin/assign-room", {
+      doctorId,
+      roomNumber,
+    });
+    setResp(data);
   }
 
   return (
-    <div>
-      <h1>Admin</h1>
-      <div style={{display:'grid', gap:8, maxWidth:420}}>
-        <input value={patientId} onChange={e=>setPatientId(e.target.value)} placeholder="patientId" />
-        <input value={room} onChange={e=>setRoom(e.target.value)} placeholder="room" />
-        <button onClick={assign}>Assign Room</button>
+    <div className="p-6 space-y-6">
+      <h1 className="text-2xl font-bold">🧾 Admin Portal</h1>
+      <div className="space-y-3 max-w-md">
+        <input
+          className="border p-2 w-full rounded"
+          value={doctorId}
+          onChange={(e) => setDoctorId(e.target.value)}
+          placeholder="Doctor ID"
+        />
+        <input
+          className="border p-2 w-full rounded"
+          value={roomNumber}
+          onChange={(e) => setRoomNumber(e.target.value)}
+          placeholder="Room Number"
+        />
+        <button
+          onClick={assignRoom}
+          className="bg-amber-600 text-white px-4 py-2 rounded"
+        >
+          🧾 Assign Room
+        </button>
       </div>
-      {resp && <pre>{JSON.stringify(resp, null, 2)}</pre>}
+
+      {resp && (
+        <div className="bg-gray-100 p-4 rounded">
+          <pre>{JSON.stringify(resp, null, 2)}</pre>
+        </div>
+      )}
     </div>
-  )
+  );
 }
