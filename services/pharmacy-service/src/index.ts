@@ -2,13 +2,13 @@ import express from "express";
 import "dotenv/config";
 import cors from "cors";
 import mq from "../../common/events/src/broker.ts";
-import logEventModule from "../../common/db/logger.ts";
 import { pool } from "./db.js";
+import logEventModule from "../../common/db/logger.ts";
+
 const logEvent = (logEventModule as any).default || logEventModule;
 
 const app = express();
 app.use(express.json());
-
 app.use(
   cors({
     origin: "http://localhost:5173",
@@ -23,26 +23,34 @@ const RABBITMQ_URL =
 
 app.get("/health", (_req, res) => res.json({ service: "pharmacy", ok: true }));
 
+/* ============================================================================
+   💊 SUBSCRIBERS
+============================================================================ */
 async function startPharmacySubscribers() {
   try {
+    // Listen for prescriptions created by the doctor
     await mq.subscribe(
       RABBITMQ_URL,
-      "lab.test.completed",
+      "pharmacy.prescription.created",
       async (_key, msg) => {
-        console.log("[pharmacy] 💊 received lab result:", msg);
-        // Example: automatically prepare prescription
-        const evt = {
-          key: "pharmacy.prescription.fulfilled",
-          payload: {
-            patientId: msg.payload.patientId,
-            fulfilledAt: new Date().toISOString(),
-          },
-        };
-        await mq.publish(RABBITMQ_URL, evt.key, evt, logEvent);
+        const { patientId, doctorId, medicine, dosage } = msg.payload;
+        try {
+          await pool.query(
+            `INSERT INTO prescriptions (patient_id, doctor_id, medicine, dosage)
+             VALUES ($1, $2, $3, $4)`,
+            [patientId, doctorId, medicine, dosage]
+          );
+          console.log(
+            `[pharmacy] 💾 stored new prescription for patient ${patientId}`
+          );
+        } catch (err) {
+          console.error("[pharmacy] ❌ failed to insert prescription:", err);
+        }
       },
       logEvent
     );
 
+    // Optional heartbeat listener
     await mq.subscribe(
       RABBITMQ_URL,
       "doctor.heartbeat",
@@ -51,61 +59,80 @@ async function startPharmacySubscribers() {
       },
       logEvent
     );
+
+    console.log("[pharmacy] ✅ subscribers started");
   } catch (err) {
-    console.error("[pharmacy] subscriber error:", err);
+    console.error("[pharmacy] ❌ subscriber error:", err);
   }
 }
 
-// ✅ Manual prescription fulfillment endpoint (called from frontend)
+/* ============================================================================
+   📦 ROUTES
+============================================================================ */
+
+// Get all pending (unfulfilled) prescriptions
+app.get("/pharmacy/pending", async (_req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT p.id, p.patient_id, p.doctor_id, p.medicine, p.dosage
+      FROM prescriptions p
+      LEFT JOIN prescriptions_fulfilled f ON f.prescription_id = p.id::text
+      WHERE f.prescription_id IS NULL
+      ORDER BY p.created_at DESC
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("[pharmacy] ❌ failed to fetch pending:", err);
+    res.status(500).json({ error: "Failed to fetch pending prescriptions" });
+  }
+});
+
+// Fulfill a prescription
 app.post("/pharmacy/fulfill", async (req, res) => {
-  const { patientId, medicine, dosage } = req.body;
+  const { prescriptionId } = req.body;
+  if (!prescriptionId)
+    return res.status(400).json({ error: "Missing prescriptionId" });
 
   try {
-    // Insert into DB (optional, for tracking)
+    // Lookup the prescription
+    const prescResult = await pool.query(
+      "SELECT * FROM prescriptions WHERE id = $1",
+      [prescriptionId]
+    );
+    const presc = prescResult.rows[0];
+    if (!presc)
+      return res.status(404).json({ error: "Prescription not found" });
+
+    // Insert fulfillment record
     await pool.query(
-      "INSERT INTO prescriptions_fulfilled (prescription_id, pharmacy_id) VALUES ($1, $2)",
-      [patientId, "pharmacy-frontend"]
+      `INSERT INTO prescriptions_fulfilled (prescription_id, pharmacy_id)
+       VALUES ($1, $2)`,
+      [prescriptionId, "pharmacy-frontend"]
     );
 
     // Publish fulfillment event
     const evt = {
       key: "pharmacy.prescription.fulfilled",
       payload: {
-        patientId,
-        medicine,
-        dosage,
+        patientId: presc.patient_id,
+        medicine: presc.medicine,
         fulfilledAt: new Date().toISOString(),
       },
     };
 
     await mq.publish(RABBITMQ_URL, evt.key, evt, logEvent);
+    console.log(`[pharmacy] ✅ fulfilled prescription ${prescriptionId}`);
+
     res.json({ ok: true, event: evt });
   } catch (err) {
-    console.error("[pharmacy] fulfill error:", err);
+    console.error("[pharmacy] ❌ fulfill error:", err);
     res.status(500).json({ error: "Failed to fulfill prescription" });
   }
 });
 
-// ✅ Receive new prescriptions and mark them fulfilled
-await mq.subscribe(
-  RABBITMQ_URL,
-  "pharmacy.prescription.created",
-  async (_key, msg) => {
-    const { patientId, medicine, dosage, doctorId } = msg.payload;
-    await pool.query(
-      "INSERT INTO prescriptions_fulfilled (prescription_id, pharmacy_id) VALUES ($1,$2)",
-      [doctorId, "pharmacy-001"]
-    );
-    const evt = {
-      key: "pharmacy.prescription.fulfilled",
-      payload: { patientId, medicine, fulfilledAt: new Date().toISOString() },
-    };
-    await mq.publish(RABBITMQ_URL, evt.key, evt, logEvent);
-  },
-  logEvent
-);
-
-// Example periodic publisher: stock status
+/* ============================================================================
+   🔁 STOCK STATUS (optional)
+============================================================================ */
 setInterval(async () => {
   const evt = {
     key: "pharmacy.stock.update",
@@ -114,5 +141,8 @@ setInterval(async () => {
   await mq.publish(RABBITMQ_URL, evt.key, evt, logEvent);
 }, 10 * 60_000);
 
+/* ============================================================================
+   🚀 START SERVER
+============================================================================ */
 startPharmacySubscribers();
-app.listen(PORT, () => console.log(`pharmacy-service 💊 on ${PORT}`));
+app.listen(PORT, () => console.log(`pharmacy-service 💊 running on ${PORT}`));

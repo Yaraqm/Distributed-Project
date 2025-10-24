@@ -27,15 +27,28 @@ export async function publish<T>(
   const exchange = "hms.topic";
   await channel.assertExchange(exchange, "topic", { durable: true });
 
-  channel.publish(exchange, routingKey, Buffer.from(JSON.stringify(message)), {
-    contentType: "application/json",
-    persistent: true,
-  });
+  // ✅ Always have a safe payload
+  const safeMessage: any = message || {};
+  const payload = (safeMessage.payload ?? safeMessage) || {};
+
+  channel.publish(
+    exchange,
+    routingKey,
+    Buffer.from(JSON.stringify(safeMessage)),
+    {
+      contentType: "application/json",
+      persistent: true,
+    }
+  );
 
   const service = process.env.SERVICE_NAME || "unknown";
 
   if (logEvent) {
-    await logEvent(service, "sent", routingKey, message);
+    try {
+      await logEvent(service, "sent", routingKey, payload);
+    } catch (err) {
+      console.error("[broker] ⚠️ logEvent (sent) failed:", err);
+    }
   }
 }
 
@@ -64,8 +77,16 @@ export async function subscribe(
     if (!m) return;
     try {
       const body = JSON.parse(m.content.toString());
-      if (logEvent)
-        await logEvent(service, "received", m.fields.routingKey, body);
+      const payload = (body?.payload ?? body) || {}; // ✅ Safe default
+
+      if (logEvent) {
+        try {
+          await logEvent(service, "received", m.fields.routingKey, payload);
+        } catch (err) {
+          console.error("[broker] ⚠️ logEvent (received) failed:", err);
+        }
+      }
+
       await onMessage(m.fields.routingKey, body);
       channel.ack(m);
     } catch (e) {

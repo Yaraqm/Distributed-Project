@@ -23,6 +23,16 @@ const RABBITMQ_URL =
 
 app.get("/health", (_req, res) => res.json({ service: "admin", ok: true }));
 
+app.get("/doctors", async (_req, res) => {
+  const result = await pool.query("SELECT * FROM doctors");
+  res.json(result.rows);
+});
+
+app.get("/rooms", async (_req, res) => {
+  const result = await pool.query("SELECT * FROM rooms");
+  res.json(result.rows);
+});
+
 async function startAdminSubscribers() {
   try {
     await mq.subscribe(
@@ -59,15 +69,23 @@ async function startAdminSubscribers() {
 // ✅ Add this endpoint:
 app.post("/admin/assign-room", async (req, res) => {
   const { doctorId, roomNumber } = req.body;
+
   await pool.query(
-    "INSERT INTO room_assignments (doctor_id, room_number) VALUES ($1,$2)",
+    "INSERT INTO room_assignments (doctor_id, room_number) VALUES ($1, $2)",
     [doctorId, roomNumber]
+  );
+
+  // Mark room as unavailable
+  await pool.query(
+    "UPDATE rooms SET is_available = false WHERE room_number = $1",
+    [roomNumber]
   );
 
   const evt = {
     key: "admin.room.assigned",
     payload: { doctorId, roomNumber, assignedAt: new Date().toISOString() },
   };
+
   await mq.publish(RABBITMQ_URL, evt.key, evt, logEvent);
   res.json({ ok: true, event: evt });
 });
