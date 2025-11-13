@@ -5,45 +5,140 @@ type ServiceStatus = {
   name: string;
   url: string;
   healthy: boolean;
-  lastEvent?: string;
   color?: string;
 };
 
+// ---------- helpers for nicer routing/payload rendering ----------
+function isObject(v: any) {
+  return v && typeof v === "object" && !Array.isArray(v);
+}
+
+function formatRoutingKey(key: string = "") {
+  // doctor.heartbeat -> Doctor • Heartbeat
+  return key
+    .split(".")
+    .map((seg) =>
+      seg
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, (c) => c.toUpperCase())
+    )
+    .join(" • ");
+}
+
+/** Smarter normalization — handles nested {Key, Payload} and stringified JSON */
+function normalizePayload(payload: any): any {
+  // Flatten already-object {Key, Payload} forms
+  if (payload && typeof payload === "object") {
+    if (payload.Key && payload.Payload && typeof payload.Payload === "object") {
+      const inner = payload.Payload;
+      const flattened: Record<string, any> = { event: formatRoutingKey(String(payload.Key)) };
+      for (const [k, v] of Object.entries(inner)) {
+        flattened[k.charAt(0).toLowerCase() + k.slice(1)] = v;
+      }
+      return flattened;
+    } else if (payload.key && payload.payload && typeof payload.payload === "object") {
+      const inner = payload.payload;
+      const flattened: Record<string, any> = { event: formatRoutingKey(payload.key) };
+      for (const [k, v] of Object.entries(inner)) {
+        flattened[k.charAt(0).toLowerCase() + k.slice(1)] = v;
+      }
+      return flattened;
+    }
+    return payload;
+  }
+
+  if (typeof payload !== "string") return payload;
+  let s = payload.trim();
+
+  // remove extra quotes/backticks
+  if (
+    (s.startsWith('"') && s.endsWith('"')) ||
+    (s.startsWith("'") && s.endsWith("'")) ||
+    (s.startsWith("`") && s.endsWith("`"))
+  ) {
+    s = s.slice(1, -1);
+  }
+
+  // normalize special characters
+  s = s.replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replace(/\u200B|\uFEFF/g, "");
+
+  // parse JSON safely
+  try {
+    const parsed = JSON.parse(s);
+    return normalizePayload(parsed); // 🔁 recursively normalize if it’s nested
+  } catch {
+    // try again for double-encoded JSON like "{\"Key\":\"...\"}"
+    try {
+      const unescaped = s
+        .replace(/\\"/g, '"')
+        .replace(/\\n/g, "\n")
+        .replace(/\\t/g, "\t")
+        .replace(/\\\\/g, "\\");
+      const parsed = JSON.parse(unescaped);
+      return normalizePayload(parsed);
+    } catch {
+      return s;
+    }
+  }
+}
+
+function formatValue(v: any): string {
+  if (v == null) return "—";
+  if (Array.isArray(v)) return v.map((x) => String(x)).join(", ");
+  if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}T/.test(v)) {
+    const d = new Date(v);
+    if (!isNaN(d.getTime())) return d.toLocaleString();
+  }
+  if (typeof v === "boolean") return v ? "true" : "false";
+  return typeof v === "object" ? JSON.stringify(v) : String(v);
+}
+
+function PayloadView({ payload, depth = 0 }: { payload: any; depth?: number }) {
+  if (!isObject(payload)) return <div className="text-gray-300">{formatValue(payload)}</div>;
+
+  const entries = Object.entries(payload as Record<string, any>);
+  return (
+    <div
+      className="text-gray-300"
+      style={{
+        borderLeft: depth ? "2px solid rgba(148,163,184,.25)" : undefined,
+        paddingLeft: depth ? 10 : 0,
+      }}
+    >
+      <dl className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-1">
+        {entries.map(([k, v]) => (
+          <div key={k} className="contents">
+            <dt className="text-gray-400">{k}</dt>
+            <dd>
+              {isObject(v) ? (
+                <PayloadView payload={v} depth={depth + 1} />
+              ) : (
+                <span>{formatValue(v)}</span>
+              )}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+// -----------------------------------------------------------------
+
 export default function Dashboard() {
   const [services, setServices] = useState<ServiceStatus[]>([
-    {
-      name: "Doctor",
-      url: "http://localhost:4001/health",
-      healthy: false,
-      color: "blue",
-    },
-    {
-      name: "Lab",
-      url: "http://localhost:4003/health",
-      healthy: false,
-      color: "purple",
-    },
-    {
-      name: "Pharmacy",
-      url: "http://localhost:4004/health",
-      healthy: false,
-      color: "green",
-    },
-    {
-      name: "Admin",
-      url: "http://localhost:4002/health",
-      healthy: false,
-      color: "amber",
-    },
+    { name: "Doctor", url: "http://localhost:4001/health", healthy: false, color: "blue" },
+    { name: "Lab", url: "http://localhost:4003/health", healthy: false, color: "purple" },
+    { name: "Pharmacy", url: "http://localhost:4004/health", healthy: false, color: "green" },
+    { name: "Admin", url: "http://localhost:4002/health", healthy: false, color: "amber" },
   ]);
+
   const [events, setEvents] = useState<any[]>([]);
 
-  // ✅ Check service health
   async function checkHealth() {
     const updated = await Promise.all(
       services.map(async (svc) => {
         try {
-          const res = await axios.get(svc.url);
+          const res = await axios.get(svc.url, { timeout: 3000 });
           return { ...svc, healthy: res.data.ok };
         } catch {
           return { ...svc, healthy: false };
@@ -53,12 +148,18 @@ export default function Dashboard() {
     setServices(updated);
   }
 
-  // ✅ Load latest events (requires backend endpoint `/events` or `/logs`)
   async function fetchEvents() {
     try {
-      // You can expose this from any one service (e.g. admin-service) via DB
-      const res = await axios.get("http://localhost:4002/events"); // <- add endpoint
-      setEvents(res.data.slice(-20).reverse()); // latest 20
+      const res = await axios.get("http://localhost:4002/events");
+      const validEvents = res.data.filter((e: any) => typeof e === "object" && e !== null);
+
+      const unique = new Map();
+      for (const e of validEvents) {
+        const key = `${e.routing_key || e.topic || e.event}-${JSON.stringify(e.payload)}`;
+        if (!unique.has(key)) unique.set(key, e);
+      }
+
+      setEvents(Array.from(unique.values()).slice(-20).reverse());
     } catch (err) {
       console.error("Failed to fetch events:", err);
     }
@@ -75,60 +176,70 @@ export default function Dashboard() {
   }, []);
 
   return (
-    <div className="p-6 space-y-8">
-      <h1 className="text-3xl font-bold">🏥 Hospital System Dashboard</h1>
+    <div className="space-y-10">
+      <h1 className="text-4xl font-extrabold text-black border-b border-gray-700 pb-4">
+        MicroHealth System Dashboard
+      </h1>
 
-      {/* Services Status */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {/* Services */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {services.map((svc) => (
           <div
             key={svc.name}
-            className={`border rounded-xl p-4 shadow-md flex flex-col items-center ${
-              svc.healthy ? "bg-green-50" : "bg-red-50"
-            }`}
+            className={`rounded-xl p-6 shadow-2xl transition-all duration-300 transform hover:scale-[1.02]
+              ${svc.healthy
+                ? "bg-gray-800 border-t-4 border-green-500 hover:border-green-400"
+                : "bg-gray-800 border-t-4 border-red-500 hover:border-red-400"}
+              border border-gray-700`}
           >
-            <h2 className={`text-lg font-bold text-${svc.color}-700`}>
-              {svc.name}
-            </h2>
-            <p className="text-sm">
-              Status:{" "}
-              <span className={svc.healthy ? "text-green-600" : "text-red-600"}>
-                {svc.healthy ? "Online ✅" : "Offline ❌"}
+            <h2 className="text-2xl font-bold mb-2 text-white">{svc.name}</h2>
+            <p className="text-sm font-medium text-gray-400 mb-4">Status Indicator</p>
+            <p className="text-lg font-semibold">
+              <span className={svc.healthy ? "text-green-400" : "text-red-400"}>
+                {svc.healthy ? "ONLINE" : "OFFLINE"}
               </span>
             </p>
             <a
               href={`/${svc.name.toLowerCase()}`}
-              className={`mt-2 px-3 py-1 bg-${svc.color}-600 text-white rounded`}
+              className={`mt-4 inline-block px-4 py-2 text-white rounded-lg transition duration-200 shadow-md 
+                bg-${svc.color}-600 hover:bg-${svc.color}-500 focus:outline-none focus:ring-2 focus:ring-${svc.color}-400 focus:ring-offset-2 focus:ring-offset-gray-900
+                w-full text-center font-bold`}
             >
-              Open {svc.name}
+              Open Portal
             </a>
           </div>
         ))}
       </div>
 
-      {/* Live Event Feed */}
+      {/* Event Feed */}
       <div className="mt-8">
-        <h2 className="text-2xl font-semibold mb-3">📡 Live Event Feed</h2>
-        <div className="border rounded-lg bg-gray-50 p-4 h-96 overflow-y-auto text-sm font-mono">
-          {events.length === 0 && (
-            <p className="text-gray-500">No events yet...</p>
-          )}
-          {events.map((e, i) => (
-            <div key={i} className="mb-2 border-b border-gray-200 pb-1">
-              <strong>
-                {e.direction === "sent" ? "📤 Sent" : "📥 Received"}
-              </strong>{" "}
-              <span className="text-gray-600">{e.routing_key}</span>{" "}
-              <span className="text-gray-400 text-xs">
-                {new Date(e.created_at || e.timestamp).toLocaleTimeString()}
-              </span>
-              <div className="pl-4 text-gray-700">
-                {JSON.stringify(e.payload).slice(0, 200)}
+        <h2 className="text-3xl font-bold mb-4 text-black">Live Event Feed</h2>
+        <div className="rounded-xl bg-gray-800 p-6 h-[400px] overflow-y-auto shadow-inner border border-gray-700 text-sm font-mono text-gray-300">
+          {events.length === 0 && <p className="text-gray-500">No events yet...</p>}
+          {events.map((e, i) => {
+            const routing = formatRoutingKey(e.routing_key || e.topic || e.event || "");
+            const payload = normalizePayload(e.payload ?? e.message ?? e.body);
+            const eventName = payload.event || routing;
+            return (
+              <div key={i} className="mb-3 border-b border-gray-700 pb-3 last:border-b-0">
+                <div className="flex justify-between items-center">
+                  <strong className={e.direction === "sent" ? "text-yellow-400" : "text-blue-400"}>
+                    {e.direction === "sent" ? "📤 SENT" : "📥 RECV"}
+                  </strong>
+                  <span className="text-gray-500 text-xs">
+                    {new Date(e.created_at || e.timestamp).toLocaleTimeString()}
+                  </span>
+                </div>
+                <p className="text-gray-400 break-words my-1">{eventName}</p>
+                <div className="pl-2">
+                  <PayloadView payload={payload} />
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
   );
 }
+

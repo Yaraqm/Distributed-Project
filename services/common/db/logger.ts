@@ -7,28 +7,32 @@ export default async function logEvent(
   payload: any
 ) {
   try {
-    // ✅ Ensure direction is always valid
     const cleanDirection =
       direction && typeof direction === "string"
         ? direction.trim().toLowerCase()
         : "sent";
 
-    // ✅ Fallback to a safe default if direction is invalid
     const finalDirection =
       cleanDirection === "sent" || cleanDirection === "received"
         ? cleanDirection
         : "sent";
 
-    // ✅ Safely serialize payload
-    let safePayload: string;
-    try {
-      safePayload =
-        payload !== undefined && payload !== null
-          ? JSON.stringify(payload)
-          : "{}";
-    } catch {
-      safePayload = "{}";
-    }
+    // ✅ Normalize keys to lowercase for consistent dashboard display
+    const normalizeKeys = (obj: Record<string, any>): Record<string, any> => {
+      if (!obj || typeof obj !== "object") return obj;
+      return Object.fromEntries(
+        Object.entries(obj).map(([k, v]) => [
+          k.charAt(0).toLowerCase() + k.slice(1),
+          typeof v === "object" && v !== null ? normalizeKeys(v) : v,
+        ])
+      );
+    };
+
+
+    const normalizedPayload = normalizeKeys(payload ?? {});
+
+    // ✅ Avoid double-stringifying: only stringify once for DB storage
+    const safePayload = JSON.stringify(normalizedPayload);
 
     const query = `
       INSERT INTO event_logs (service, direction, routing_key, payload, created_at)

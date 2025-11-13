@@ -4,6 +4,7 @@ import cors from "cors";
 import mq from "../../common/events/src/broker.ts";
 import { pool } from "./db.js";
 import logEventModule from "../../common/db/logger.ts";
+
 const logEvent = (logEventModule as any).default || logEventModule;
 
 const app = express();
@@ -20,14 +21,14 @@ const PORT = process.env.PORT || 4003;
 const RABBITMQ_URL =
   process.env.RABBITMQ_URL || "amqp://guest:guest@localhost:5672";
 
-// 🩺 Health check
+/* =============================================================================
+   🩺 HEALTH CHECK
+============================================================================= */
 app.get("/health", (_req, res) => res.json({ service: "lab", ok: true }));
 
-/* 
-===============================================================================
-  🧬 SUBSCRIBERS
-===============================================================================
-*/
+/* =============================================================================
+   🧬 SUBSCRIBERS
+============================================================================= */
 async function startLabSubscribers() {
   try {
     // 🔹 Listen for doctor test requests
@@ -38,14 +39,24 @@ async function startLabSubscribers() {
         const { patientId, testType, orderedBy } = msg.payload;
 
         try {
-          // Store test request in DB
+          // Get doctor name for reference
+          const doctorQuery = await pool.query(
+            `SELECT name FROM doctors WHERE id = $1 LIMIT 1`,
+            [orderedBy]
+          );
+          const doctorName = doctorQuery.rows[0]?.name || `Doctor ${orderedBy}`;
+
+          // Store new test
           await pool.query(
             `INSERT INTO lab_tests (patient_id, test_type, doctor_id)
-             VALUES ($1, $2, $3)`,
+            VALUES ($1, $2, $3)
+            ON CONFLICT (patient_id, test_type, doctor_id) DO NOTHING`,
             [patientId, testType, orderedBy]
-          );
+          );
 
-          console.log(`[lab] 🧾 stored new test for patient ${patientId}`);
+          console.log(
+            `[lab] 🧾 Stored new test (${testType}) for patient ${patientId}, ordered by ${doctorName}`
+          );
         } catch (err) {
           console.error("[lab] ❌ DB insert error:", err);
         }
@@ -53,40 +64,39 @@ async function startLabSubscribers() {
       logEvent
     );
 
-    // Optional: listen for heartbeat from doctors
+    // 🔸 Optional: listen for doctor heartbeat
     await mq.subscribe(
       RABBITMQ_URL,
       "doctor.heartbeat",
       async (_key, msg) => {
-        console.log("[lab] ❤️ doctor heartbeat received:", msg);
+        console.log("[lab] ❤️ Doctor heartbeat received:", msg);
       },
       logEvent
     );
 
-    console.log("[lab] ✅ subscribers started");
+    console.log("[lab] ✅ Subscribers started successfully");
   } catch (e) {
-    console.error("[lab] ❌ failed to start subscriber:", e);
+    console.error("[lab] ❌ Failed to start subscriber:", e);
   }
 }
 
-/* 
-===============================================================================
-  🧪 ROUTES
-===============================================================================
-*/
+/* =============================================================================
+   🧪 ROUTES
+============================================================================= */
 
-// ✅ Return all pending lab tests
+// ✅ Fetch all pending lab tests (with doctor name)
 app.get("/lab/tests/pending", async (_req, res) => {
   try {
     const result = await pool.query(
-      `SELECT id, patient_id, test_type, doctor_id
-       FROM lab_tests
-       WHERE result IS NULL
-       ORDER BY created_at DESC`
+      `SELECT lt.id, lt.patient_id, lt.test_type, lt.doctor_id, d.name AS doctor_name
+       FROM lab_tests lt
+       LEFT JOIN doctors d ON lt.doctor_id::INT8 = d.id
+       WHERE lt.result IS NULL
+       ORDER BY lt.created_at DESC`
     );
     res.json(result.rows);
   } catch (err) {
-    console.error("[lab] ❌ failed to fetch pending tests:", err);
+    console.error("[lab] ❌ Failed to fetch pending tests:", err);
     res.status(500).json({ error: "Failed to fetch pending tests" });
   }
 });
@@ -95,56 +105,78 @@ app.get("/lab/tests/pending", async (_req, res) => {
 app.post("/lab/result", async (req, res) => {
   const { patientId, result } = req.body;
   if (!patientId || !result)
-    return res.status(400).json({ error: "Missing patientId or result" });
+    return res
+      .status(400)
+      .json({ error: "Missing patientId or result field." });
 
   try {
-    // Update test in DB
-    await pool.query(
-      `UPDATE lab_tests
-       SET result = $1
-       WHERE patient_id = $2
-       AND result IS NULL
+    // Fetch the latest pending test for that patient
+    const testQuery = await pool.query(
+      `SELECT lt.id, lt.test_type, lt.doctor_id, d.name AS doctor_name
+       FROM lab_tests lt
+       LEFT JOIN doctors d ON lt.doctor_id::INT8 = d.id
+       WHERE lt.patient_id = $1 AND lt.result IS NULL
+       ORDER BY lt.created_at DESC
        LIMIT 1`,
-      [result, patientId]
+      [patientId]
     );
 
-    // Publish test completion event
+    if (testQuery.rows.length === 0)
+      return res.status(404).json({ error: "No pending test found for patient" });
+
+    const { id, test_type, doctor_id, doctor_name } = testQuery.rows[0];
+
+    // Update result in DB
+    await pool.query(`UPDATE lab_tests SET result = $1 WHERE id = $2`, [
+      result,
+      id,
+    ]);
+
     const evt = {
       key: "lab.test.completed",
-      payload: { patientId, result, completedAt: new Date().toISOString() },
+      payload: {
+        patientId,
+        testType: test_type,
+        result,
+        doctorName: doctor_name || `Doctor ${doctor_id}`,
+        completedAt: new Date().toISOString(),
+      },
     };
 
     await mq.publish(RABBITMQ_URL, evt.key, evt, logEvent);
-    console.log(`[lab] ✅ published test completion for ${patientId}`);
+    console.log(`[lab] ✅ Published test completion for patient ${patientId}`);
 
-    res.json({ ok: true, event: evt });
+    res.json({
+      ok: true,
+      message: `Result successfully published for Test ${id}`,
+      event: evt,
+    });
   } catch (err) {
-    console.error("[lab] ❌ failed to publish result:", err);
+    console.error("[lab] ❌ Failed to publish result:", err);
     res.status(500).json({ error: "Failed to complete test" });
   }
 });
 
-// ✅ Optional route to see completed tests
+// ✅ Optional: view completed tests
 app.get("/lab/tests/completed", async (_req, res) => {
   try {
     const result = await pool.query(
-      `SELECT id, patient_id, test_type, doctor_id, result, created_at
-       FROM lab_tests
-       WHERE result IS NOT NULL
-       ORDER BY created_at DESC`
+      `SELECT lt.id, lt.patient_id, lt.test_type, lt.doctor_id, lt.result, lt.created_at, d.name AS doctor_name
+       FROM lab_tests lt
+       LEFT JOIN doctors d ON lt.doctor_id::INT8 = d.id
+       WHERE lt.result IS NOT NULL
+       ORDER BY lt.created_at DESC`
     );
     res.json(result.rows);
   } catch (err) {
-    console.error("[lab] ❌ failed to fetch completed tests:", err);
+    console.error("[lab] ❌ Failed to fetch completed tests:", err);
     res.status(500).json({ error: "Failed to fetch completed tests" });
   }
 });
 
-/* 
-===============================================================================
-  📦 PERIODIC EVENTS (optional inventory update)
-===============================================================================
-*/
+/* =============================================================================
+   📦 PERIODIC EVENTS (Inventory Example)
+============================================================================= */
 setInterval(async () => {
   const evt = {
     key: "lab.inventory.update",
@@ -156,10 +188,8 @@ setInterval(async () => {
   await mq.publish(RABBITMQ_URL, evt.key, evt, logEvent);
 }, 5 * 60_000);
 
-/* 
-===============================================================================
-  🚀 START SERVER
-===============================================================================
-*/
+/* =============================================================================
+   🚀 START SERVER
+============================================================================= */
 startLabSubscribers();
 app.listen(PORT, () => console.log(`lab-service 🧪 running on ${PORT}`));

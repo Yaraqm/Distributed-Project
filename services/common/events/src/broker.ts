@@ -3,11 +3,10 @@ import amqplib, { Connection, Channel } from "amqplib";
 let conn: Connection | null = null;
 let ch: Channel | null = null;
 
+/** Create or reuse RabbitMQ channel */
 export async function getChannel(url: string): Promise<Channel> {
-  console.log("[broker] connecting to", url);
   if (!conn) conn = await (amqplib as any).connect(url);
   if (!ch) ch = await (conn as any).createChannel();
-  console.log("[broker] channel created");
   return ch!;
 }
 
@@ -27,32 +26,47 @@ export async function publish<T>(
   const exchange = "hms.topic";
   await channel.assertExchange(exchange, "topic", { durable: true });
 
-  // ✅ Always have a safe payload
+  // 🧩 Sanitize message so it never has capitalized Key/Payload
   const safeMessage: any = message || {};
-  const payload = (safeMessage.payload ?? safeMessage) || {};
+  let cleanPayload: any = {};
 
-  channel.publish(
-    exchange,
-    routingKey,
-    Buffer.from(JSON.stringify(safeMessage)),
-    {
-      contentType: "application/json",
-      persistent: true,
+  if (typeof safeMessage === "object") {
+    // normalize any legacy structure
+    if (safeMessage.Key && safeMessage.Payload) {
+      cleanPayload = safeMessage.Payload;
+    } else if (safeMessage.payload) {
+      cleanPayload = safeMessage.payload;
+    } else {
+      cleanPayload = safeMessage;
     }
-  );
+  }
+
+  // Always lowercase keys for consistency
+  const normalized = {
+    key: (safeMessage.key || safeMessage.Key || routingKey).toLowerCase(),
+    payload: cleanPayload,
+    timestamp: new Date().toISOString(),
+  };
+
+  // 📨 Publish this clean, normalized object
+  channel.publish(exchange, routingKey, Buffer.from(JSON.stringify(normalized)), {
+    contentType: "application/json",
+    persistent: true,
+  });
 
   const service = process.env.SERVICE_NAME || "unknown";
 
+  // ✅ Log clean payload
   if (logEvent) {
     try {
-      await logEvent(service, "sent", routingKey, payload);
+      await logEvent(service, "sent", routingKey, cleanPayload);
     } catch (err) {
       console.error("[broker] ⚠️ logEvent (sent) failed:", err);
     }
   }
 }
 
-/** Subscribe to topic pattern (e.g., "lab.test.requested" or "pharmacy.*") */
+/** Subscribe to a topic pattern (e.g., "lab.test.requested" or "pharmacy.*") */
 export async function subscribe(
   url: string,
   pattern: string,
@@ -68,16 +82,16 @@ export async function subscribe(
   const exchange = "hms.topic";
   await channel.assertExchange(exchange, "topic", { durable: true });
 
-  const q = await channel.assertQueue("", { exclusive: true });
-  await channel.bindQueue(q.queue, exchange, pattern);
-
   const service = process.env.SERVICE_NAME || "unknown";
+  const queueName = `${service}.${pattern}`;
+  const q = await channel.assertQueue(queueName, { durable: true });
+  await channel.bindQueue(q.queue, exchange, pattern);
 
   channel.consume(q.queue, async (m) => {
     if (!m) return;
     try {
       const body = JSON.parse(m.content.toString());
-      const payload = (body?.payload ?? body) || {}; // ✅ Safe default
+      const payload = (body?.payload ?? body) || {};
 
       if (logEvent) {
         try {
