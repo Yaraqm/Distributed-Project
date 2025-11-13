@@ -63,22 +63,20 @@ export default function Admin() {
       });
       setAssignResp(res.data);
 
-      // ✅ Update assigned rooms state for FloorPlan
-      const assignedDoctor = doctors.find((d) => d.id === parseInt(doctorId));
+      // update state for FloorPlan
       setAssignedRooms((prev) => [
         ...prev,
         {
-          roomNumber,
-          doctorName: assignedDoctor?.name,
+          roomNumber: res.data.roomNumber,
+          doctorName: res.data.doctorName,
           doctorId: parseInt(doctorId),
         },
       ]);
-      
-      // Refresh rooms data to get updated availability
+
+      // refresh rooms
       const roomRes = await axios.get("http://localhost:4002/rooms");
       setRooms(Array.isArray(roomRes.data) ? roomRes.data : []);
-      
-      // Clear selections after assignment
+
       setDoctorId("");
       setRoomNumber("");
     } catch (err) {
@@ -99,7 +97,6 @@ export default function Admin() {
         name: newName,
         specialty: newSpecialty,
       });
-      // optimistic refresh
       setDoctors((prev) => [res.data.doctor, ...prev]);
       setDoctorResp(res.data);
       setNewName("");
@@ -111,27 +108,41 @@ export default function Admin() {
   }
 
   // ------- Remove Doctor -------
-async function removeDoctor(id: number) {
-  if (!id) return;
-  setDoctorResp(null);
-  try {
-    const res = await axios.delete(`http://localhost:4002/admin/doctors/${id}`);
-    setDoctors((prev) => prev.filter((d) => d.id !== id));
-    setDoctorResp(res.data);
-    if (String(id) === doctorId) setDoctorId("");
-  } catch (err) {
-    console.error("Error deleting doctor:", err);
-    setDoctorResp({ error: "Failed to delete doctor. See console for details." });
+  async function removeDoctor(id: number) {
+    if (!id) return;
+    setDoctorResp(null);
+    try {
+      const res = await axios.delete("http://localhost:4002/admin/doctors/${id}");
+      setDoctors((prev) => prev.filter((d) => d.id !== id));
+      setDoctorResp(res.data);
+
+      if (String(id) === doctorId) setDoctorId("");
+    } catch (err) {
+      console.error("Error deleting doctor:", err);
+      setDoctorResp({ error: "Failed to delete doctor. See console for details." });
+    }
   }
-}
 
   const inputStyle =
     "border border-gray-700 bg-gray-800 text-white p-3 rounded-lg shadow-inner focus:ring-amber-500 focus:border-amber-500 transition duration-150 w-full";
   const labelStyle = "text-gray-300 font-medium mb-1 block";
   const sectionCard = "bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700 space-y-6";
 
-  // ✅ Get available rooms (is_available = true)
+  // Available rooms
   const availableRooms = rooms.filter(room => room.is_available === true);
+
+  // 🟦 NEW: Doctors who are NOT assigned to any room
+const assignedDoctorIds = new Set(
+  assignedRooms
+    .map((r) => r.doctorId)
+    .filter((id) => id !== undefined && id !== null)
+    .map((id) => Number(id))
+);
+
+const availableDoctors = doctors.filter((d) => {
+  const docId = Number(d.id);
+  return !assignedDoctorIds.has(docId);
+});
 
   // ------- pretty cards -------
   function AssignResult({ data }: { data: AssignResp }) {
@@ -147,8 +158,6 @@ async function removeDoctor(id: number) {
     const doc = p.doctorId ?? p.doctor_id ?? "—";
     const room = p.roomNumber ?? p.room_number ?? "—";
     const at = p.assignedAt ?? p.assigned_at;
-
-    const fallback = isObject(p) && doc === "—" && room === "—" && !p.assignedAt && !p.assigned_at;
 
     return (
       <div className="rounded-xl p-5 shadow-inner border bg-gray-900 border-gray-700">
@@ -177,21 +186,6 @@ async function removeDoctor(id: number) {
           <div className="text-gray-400">Assigned At</div>
           <div className="text-gray-200">{fmtTime(at)}</div>
         </div>
-
-        {fallback && (
-          <>
-            <div className="h-px bg-gray-800 my-4" />
-            <div className="text-xs text-gray-500 mb-1">Details</div>
-            <dl className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-1 text-sm font-mono text-gray-300">
-              {Object.entries(p).map(([k, v]) => (
-                <div key={k} className="contents">
-                  <dt className="text-gray-500">{k}</dt>
-                  <dd className="text-gray-200">{isObject(v) ? JSON.stringify(v) : String(v)}</dd>
-                </div>
-              ))}
-            </dl>
-          </>
-        )}
       </div>
     );
   }
@@ -212,7 +206,7 @@ async function removeDoctor(id: number) {
       <div className="rounded-xl p-5 shadow-inner border bg-gray-900 border-gray-700">
         <div className="flex items-center justify-between mb-3">
           <div className="text-amber-300 font-semibold">
-            {isCreate ? "✅ Doctor Created" : isDelete ? "🗑️ Doctor Removed" : "ℹ️ Operation Result"}
+            {isCreate ? "✅ Doctor Created" : isDelete ? "🗑 Doctor Removed" : "ℹ Operation Result"}
           </div>
           <div className="text-xs text-gray-400">
             {fmtTime(p.createdAt || p.deletedAt || new Date().toISOString())}
@@ -300,24 +294,20 @@ async function removeDoctor(id: number) {
           </div>
         )}
 
-        {/* Inline scrollbar styling */}
         <style>{`
-             /* Scrollbar Styling (only affects elements with .custom-scrollbar) */
             .custom-scrollbar::-webkit-scrollbar {
               width: 8px;
             }
             .custom-scrollbar::-webkit-scrollbar-thumb {
-              background-color: rgba(255, 255, 255, 0.8); /* white scrollbar */
+              background-color: rgba(255, 255, 255, 0.8);
               border-radius: 4px;
             }
             .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-              background-color: rgba(255, 255, 255, 1); /* brighter white on hover */
+              background-color: rgba(255, 255, 255, 1);
             }
             .custom-scrollbar::-webkit-scrollbar-track {
-              background: rgba(31, 41, 55, 0.8); /* gray-800 tint track */
+              background: rgba(31, 41, 55, 0.8);
             }
-
-            /* Firefox support */
             .custom-scrollbar {
               scrollbar-width: thin;
               scrollbar-color: rgba(255,255,255,0.8) rgba(31,41,55,0.8);
@@ -331,8 +321,8 @@ async function removeDoctor(id: number) {
           Assign Doctor to Room
         </h2>
 
-        {/* Assignment Form */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+
           {/* Doctor selection */}
           <div>
             <label className={labelStyle}>Select Doctor</label>
@@ -344,12 +334,8 @@ async function removeDoctor(id: number) {
               <option value="" className="text-gray-500 bg-gray-800">
                 Select Doctor
               </option>
-              {doctors.map((d) => (
-                <option
-                  key={d.id}
-                  value={d.id}
-                  className="bg-gray-800"
-                >
+              {availableDoctors.map((d) => (
+                <option key={d.id} value={d.id} className="bg-gray-800">
                   {d.name}
                 </option>
               ))}
@@ -379,7 +365,6 @@ async function removeDoctor(id: number) {
             </select>
           </div>
 
-          {/* Assign button */}
           <button
             onClick={assignRoom}
             className="bg-amber-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-amber-500 transition duration-200 shadow-xl focus:outline-none focus:ring-2 focus:ring-amber-400"
@@ -387,10 +372,11 @@ async function removeDoctor(id: number) {
             Assign Room
           </button>
         </div>
+
         {assignResp && <AssignResult data={assignResp} />}
       </div>
 
-      {/* 🏥 Floor Plan Section - YOUR FEATURE */}
+      {/* Floor Plan */}
       <FloorPlan assignedRooms={assignedRooms} />
     </div>
   );

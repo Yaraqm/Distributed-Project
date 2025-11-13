@@ -330,10 +330,6 @@ export default function Doctor() {
                     {resp.event.payload.doctorName ||
                       `Doctor ${resp.event.payload.doctorId}`}
                   </p>
-                  <p className="text-gray-400 text-xs mt-2">
-                    Timestamp:{" "}
-                    {new Date(resp.event.timestamp).toLocaleString()}
-                  </p>
                 </>
               )}
 
