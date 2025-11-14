@@ -14,7 +14,7 @@ type AssignResp =
   | { error: string }
   | { ok: boolean; event?: { key?: string; payload?: Record<string, any> } };
 
-type Doctor = { id: number; name: string; specialty?: string };
+type Doctor = { id: string; name: string; specialty?: string };
 
 export default function Admin() {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
@@ -55,35 +55,36 @@ export default function Admin() {
       setAssignResp({ error: "Please select both a Doctor and a Room." });
       return;
     }
+
     setAssignResp(null);
+
     try {
+      // 1️⃣ Send assignment request
       const res = await axios.post("http://localhost:4002/admin/assign-room", {
         doctorId,
         roomNumber,
       });
+
       setAssignResp(res.data);
 
-      // update state for FloorPlan
-      setAssignedRooms((prev) => [
-        ...prev,
-        {
-          roomNumber: res.data.roomNumber,
-          doctorName: res.data.doctorName,
-          doctorId: parseInt(doctorId),
-        },
-      ]);
+      // 2️⃣ Refresh assigned rooms — ensures dropdown updates immediately
+      const assignedRes = await axios.get("http://localhost:4002/admin/assigned-rooms");
+      setAssignedRooms(Array.isArray(assignedRes.data) ? assignedRes.data : []);
 
-      // refresh rooms
+      // 3️⃣ Refresh rooms state
       const roomRes = await axios.get("http://localhost:4002/rooms");
       setRooms(Array.isArray(roomRes.data) ? roomRes.data : []);
 
+      // 4️⃣ Clear UI fields
       setDoctorId("");
       setRoomNumber("");
+
     } catch (err) {
       console.error("❌ Error assigning room:", err);
       setAssignResp({ error: "Failed to assign room. See console for details." });
     }
   }
+
 
   // ------- Add Doctor -------
   async function addDoctor() {
@@ -108,20 +109,37 @@ export default function Admin() {
   }
 
   // ------- Remove Doctor -------
-  async function removeDoctor(id: number) {
+  async function removeDoctor(id: string) {
     if (!id) return;
     setDoctorResp(null);
+
     try {
-      const res = await axios.delete("http://localhost:4002/admin/doctors/${id}");
-      setDoctors((prev) => prev.filter((d) => d.id !== id));
+      // 1️⃣ Delete doctor
+      const res = await axios.delete(`http://localhost:4002/admin/doctors/${id}`);
+
+      // 2️⃣ Update doctor list immediately
+      setDoctors((prev) => prev.filter((d) => String(d.id) !== String(id)));
+
+      // 3️⃣ Refresh assigned rooms so FloorPlan updates instantly
+      const assignedRes = await axios.get("http://localhost:4002/admin/assigned-rooms");
+      setAssignedRooms(Array.isArray(assignedRes.data) ? assignedRes.data : []);
+
+      // 4️⃣ Refresh rooms (optional but recommended)
+      const roomRes = await axios.get("http://localhost:4002/rooms");
+      setRooms(Array.isArray(roomRes.data) ? roomRes.data : []);
+
+      // 5️⃣ Operation response
       setDoctorResp(res.data);
 
+      // 6️⃣ Clear selected doctor if needed
       if (String(id) === doctorId) setDoctorId("");
+
     } catch (err) {
       console.error("Error deleting doctor:", err);
       setDoctorResp({ error: "Failed to delete doctor. See console for details." });
     }
   }
+
 
   const inputStyle =
     "border border-gray-700 bg-gray-800 text-white p-3 rounded-lg shadow-inner focus:ring-amber-500 focus:border-amber-500 transition duration-150 w-full";
@@ -131,18 +149,18 @@ export default function Admin() {
   // Available rooms
   const availableRooms = rooms.filter(room => room.is_available === true);
 
-  // 🟦 NEW: Doctors who are NOT assigned to any room
+// Assigned doctor IDs as strings
 const assignedDoctorIds = new Set(
   assignedRooms
-    .map((r) => r.doctorId)
-    .filter((id) => id !== undefined && id !== null)
-    .map((id) => Number(id))
+    .map((r) => String(r.doctorId))
+    .filter((id) => id !== "undefined" && id !== "null")
 );
 
-const availableDoctors = doctors.filter((d) => {
-  const docId = Number(d.id);
-  return !assignedDoctorIds.has(docId);
-});
+// Doctors not assigned to any room
+const availableDoctors = doctors.filter(
+  (d) => !assignedDoctorIds.has(String(d.id))
+);
+
 
   // ------- pretty cards -------
   function AssignResult({ data }: { data: AssignResp }) {
@@ -283,7 +301,7 @@ const availableDoctors = doctors.filter((d) => {
                     )}
                   </div>
                   <button
-                    onClick={() => removeDoctor(d.id)}
+                    onClick={() => removeDoctor(String(d.id))}
                     className="px-3 py-2 rounded-lg bg-red-700 text-white text-sm font-semibold hover:bg-red-600 transition"
                   >
                     Remove
