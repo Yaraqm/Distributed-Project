@@ -1,14 +1,26 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 
-const api = axios.create({ baseURL: "http://localhost:4003" }); // lab-service
+// Gateway API with token injection
+const api = axios.create({
+  baseURL: "http://localhost:3000",
+});
+
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
 
 export default function Lab() {
   const [tests, setTests] = useState<any[]>([]);
   const [selectedTest, setSelectedTest] = useState<string>("");
   const [result, setResult] = useState("Normal");
   const [resp, setResp] = useState<any>(null);
-  const [message, setMessage] = useState<{ text: string; type: "error" | "info" } | null>(null);
+  const [message, setMessage] = useState<{
+    text: string;
+    type: "error" | "info";
+  } | null>(null);
 
   async function fetchPendingTests() {
     try {
@@ -46,7 +58,10 @@ export default function Lab() {
         result,
       });
       setResp(data);
-      setMessage({ text: `Result published for Test ${selectedTest}.`, type: "info" });
+      setMessage({
+        text: `Result published for Test ${selectedTest}.`,
+        type: "info",
+      });
       setSelectedTest("");
       await fetchPendingTests();
     } catch (err) {
@@ -91,7 +106,8 @@ export default function Lab() {
           </option>
           {tests.map((t) => (
             <option key={t.id} value={t.id} className="bg-gray-800">
-              Patient {t.patient_id} – {t.test_type} (Doctor {t.doctor_name || t.doctor_id})
+              Patient {t.patient_id} – {t.test_type} (Doctor{" "}
+              {t.doctor_name || t.doctor_id})
             </option>
           ))}
         </select>

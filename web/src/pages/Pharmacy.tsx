@@ -1,13 +1,25 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 
-const api = axios.create({ baseURL: "http://localhost:4004" }); // pharmacy-service
+// API Gateway with JWT injection
+const api = axios.create({
+  baseURL: "http://localhost:3000",
+});
+
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
 
 export default function Pharmacy() {
   const [pending, setPending] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
   const [resp, setResp] = useState<any>(null);
-  const [message, setMessage] = useState<{ text: string; type: "error" | "info" } | null>(null);
+  const [message, setMessage] = useState<{
+    text: string;
+    type: "error" | "info";
+  } | null>(null);
 
   async function fetchPending() {
     try {
@@ -29,7 +41,10 @@ export default function Pharmacy() {
     setResp(null);
 
     if (!selectedId) {
-      setMessage({ text: "Please select a prescription to fulfill.", type: "info" });
+      setMessage({
+        text: "Please select a prescription to fulfill.",
+        type: "info",
+      });
       return;
     }
 
@@ -38,12 +53,18 @@ export default function Pharmacy() {
         prescriptionId: selectedId,
       });
       setResp(data);
-      setMessage({ text: `Prescription ${selectedId} fulfilled successfully.`, type: "info" });
+      setMessage({
+        text: `Prescription ${selectedId} fulfilled successfully.`,
+        type: "info",
+      });
       setSelectedId("");
       fetchPending();
     } catch (err) {
       console.error("[pharmacy] ❌ failed to fulfill:", err);
-      setMessage({ text: "Failed to fulfill prescription. See console.", type: "error" });
+      setMessage({
+        text: "Failed to fulfill prescription. See console.",
+        type: "error",
+      });
     }
   }
 

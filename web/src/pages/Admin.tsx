@@ -2,8 +2,21 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import FloorPlan from "./FloorPlan";
 
+const api = axios.create({
+  baseURL: "http://localhost:3000", // always go through gateway
+});
+
+// auto-attach token
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
 // small helpers
-function isObject(v: any) { return v && typeof v === "object" && !Array.isArray(v); }
+function isObject(v: any) {
+  return v && typeof v === "object" && !Array.isArray(v);
+}
 function fmtTime(iso?: string) {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -35,13 +48,15 @@ export default function Admin() {
     async function loadData() {
       try {
         const [doctorRes, roomRes, assignedRes] = await Promise.all([
-          axios.get("http://localhost:4002/doctors"),
-          axios.get("http://localhost:4002/rooms"),
-          axios.get("http://localhost:4002/admin/assigned-rooms")
+          axios.get("/admin/doctors"),
+          axios.get("/admin/rooms"),
+          axios.get("/admin/assigned-rooms"),
         ]);
         setDoctors(Array.isArray(doctorRes.data) ? doctorRes.data : []);
         setRooms(Array.isArray(roomRes.data) ? roomRes.data : []);
-        setAssignedRooms(Array.isArray(assignedRes.data) ? assignedRes.data : []);
+        setAssignedRooms(
+          Array.isArray(assignedRes.data) ? assignedRes.data : []
+        );
       } catch (err) {
         console.error("❌ Error loading admin data:", err);
       }
@@ -60,7 +75,7 @@ export default function Admin() {
 
     try {
       // 1️⃣ Send assignment request
-      const res = await axios.post("http://localhost:4002/admin/assign-room", {
+      const res = await axios.post("/admin/assign-room", {
         doctorId,
         roomNumber,
       });
@@ -68,23 +83,23 @@ export default function Admin() {
       setAssignResp(res.data);
 
       // 2️⃣ Refresh assigned rooms — ensures dropdown updates immediately
-      const assignedRes = await axios.get("http://localhost:4002/admin/assigned-rooms");
+      const assignedRes = await axios.get("/admin/assigned-rooms");
       setAssignedRooms(Array.isArray(assignedRes.data) ? assignedRes.data : []);
 
       // 3️⃣ Refresh rooms state
-      const roomRes = await axios.get("http://localhost:4002/rooms");
+      const roomRes = await axios.get("admin/rooms");
       setRooms(Array.isArray(roomRes.data) ? roomRes.data : []);
 
       // 4️⃣ Clear UI fields
       setDoctorId("");
       setRoomNumber("");
-
     } catch (err) {
       console.error("❌ Error assigning room:", err);
-      setAssignResp({ error: "Failed to assign room. See console for details." });
+      setAssignResp({
+        error: "Failed to assign room. See console for details.",
+      });
     }
   }
-
 
   // ------- Add Doctor -------
   async function addDoctor() {
@@ -94,7 +109,7 @@ export default function Admin() {
     }
     setDoctorResp(null);
     try {
-      const res = await axios.post("http://localhost:4002/admin/doctors", {
+      const res = await axios.post("/admin/doctors", {
         name: newName,
         specialty: newSpecialty,
       });
@@ -104,7 +119,9 @@ export default function Admin() {
       setNewSpecialty("");
     } catch (err) {
       console.error("Error creating doctor:", err);
-      setDoctorResp({ error: "Failed to create doctor. See console for details." });
+      setDoctorResp({
+        error: "Failed to create doctor. See console for details.",
+      });
     }
   }
 
@@ -115,17 +132,17 @@ export default function Admin() {
 
     try {
       // 1️⃣ Delete doctor
-      const res = await axios.delete(`http://localhost:4002/admin/doctors/${id}`);
+      const res = await axios.delete(`/admin/doctors/${id}`);
 
       // 2️⃣ Update doctor list immediately
       setDoctors((prev) => prev.filter((d) => String(d.id) !== String(id)));
 
       // 3️⃣ Refresh assigned rooms so FloorPlan updates instantly
-      const assignedRes = await axios.get("http://localhost:4002/admin/assigned-rooms");
+      const assignedRes = await axios.get("/admin/assigned-rooms");
       setAssignedRooms(Array.isArray(assignedRes.data) ? assignedRes.data : []);
 
       // 4️⃣ Refresh rooms (optional but recommended)
-      const roomRes = await axios.get("http://localhost:4002/rooms");
+      const roomRes = await axios.get("/admin/rooms");
       setRooms(Array.isArray(roomRes.data) ? roomRes.data : []);
 
       // 5️⃣ Operation response
@@ -133,34 +150,34 @@ export default function Admin() {
 
       // 6️⃣ Clear selected doctor if needed
       if (String(id) === doctorId) setDoctorId("");
-
     } catch (err) {
       console.error("Error deleting doctor:", err);
-      setDoctorResp({ error: "Failed to delete doctor. See console for details." });
+      setDoctorResp({
+        error: "Failed to delete doctor. See console for details.",
+      });
     }
   }
-
 
   const inputStyle =
     "border border-gray-700 bg-gray-800 text-white p-3 rounded-lg shadow-inner focus:ring-amber-500 focus:border-amber-500 transition duration-150 w-full";
   const labelStyle = "text-gray-300 font-medium mb-1 block";
-  const sectionCard = "bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700 space-y-6";
+  const sectionCard =
+    "bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700 space-y-6";
 
   // Available rooms
-  const availableRooms = rooms.filter(room => room.is_available === true);
+  const availableRooms = rooms.filter((room) => room.is_available === true);
 
-// Assigned doctor IDs as strings
-const assignedDoctorIds = new Set(
-  assignedRooms
-    .map((r) => String(r.doctorId))
-    .filter((id) => id !== "undefined" && id !== "null")
-);
+  // Assigned doctor IDs as strings
+  const assignedDoctorIds = new Set(
+    assignedRooms
+      .map((r) => String(r.doctorId))
+      .filter((id) => id !== "undefined" && id !== "null")
+  );
 
-// Doctors not assigned to any room
-const availableDoctors = doctors.filter(
-  (d) => !assignedDoctorIds.has(String(d.id))
-);
-
+  // Doctors not assigned to any room
+  const availableDoctors = doctors.filter(
+    (d) => !assignedDoctorIds.has(String(d.id))
+  );
 
   // ------- pretty cards -------
   function AssignResult({ data }: { data: AssignResp }) {
@@ -180,7 +197,9 @@ const availableDoctors = doctors.filter(
     return (
       <div className="rounded-xl p-5 shadow-inner border bg-gray-900 border-gray-700">
         <div className="flex items-center justify-between mb-3">
-          <div className="text-amber-300 font-semibold">✅ Room Assignment Created</div>
+          <div className="text-amber-300 font-semibold">
+            ✅ Room Assignment Created
+          </div>
           <div className="text-xs text-gray-400">{fmtTime(at)}</div>
         </div>
         <div className="grid grid-cols-[120px,1fr] gap-y-2 text-sm">
@@ -224,7 +243,11 @@ const availableDoctors = doctors.filter(
       <div className="rounded-xl p-5 shadow-inner border bg-gray-900 border-gray-700">
         <div className="flex items-center justify-between mb-3">
           <div className="text-amber-300 font-semibold">
-            {isCreate ? "✅ Doctor Created" : isDelete ? "🗑 Doctor Removed" : "ℹ Operation Result"}
+            {isCreate
+              ? "✅ Doctor Created"
+              : isDelete
+              ? "🗑 Doctor Removed"
+              : "ℹ Operation Result"}
           </div>
           <div className="text-xs text-gray-400">
             {fmtTime(p.createdAt || p.deletedAt || new Date().toISOString())}
@@ -266,14 +289,27 @@ const availableDoctors = doctors.filter(
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className={labelStyle}>Name</label>
-            <input className={inputStyle} value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g., Dr. Jane Doe" />
+            <input
+              className={inputStyle}
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="e.g., Dr. Jane Doe"
+            />
           </div>
           <div>
             <label className={labelStyle}>Specialty</label>
-            <input className={inputStyle} value={newSpecialty} onChange={(e) => setNewSpecialty(e.target.value)} placeholder="e.g., Cardiology" />
+            <input
+              className={inputStyle}
+              value={newSpecialty}
+              onChange={(e) => setNewSpecialty(e.target.value)}
+              placeholder="e.g., Cardiology"
+            />
           </div>
           <div className="flex items-end">
-            <button onClick={addDoctor} className="bg-amber-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-amber-500 transition duration-200 shadow-xl focus:outline-none focus:ring-2 focus:ring-amber-400 w-full">
+            <button
+              onClick={addDoctor}
+              className="bg-amber-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-amber-500 transition duration-200 shadow-xl focus:outline-none focus:ring-2 focus:ring-amber-400 w-full"
+            >
               Add Doctor
             </button>
           </div>
@@ -340,7 +376,6 @@ const availableDoctors = doctors.filter(
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-
           {/* Doctor selection */}
           <div>
             <label className={labelStyle}>Select Doctor</label>

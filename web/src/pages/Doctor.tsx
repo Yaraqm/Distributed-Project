@@ -1,8 +1,16 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 
-const api = axios.create({ baseURL: "http://localhost:4001" }); // doctor-service
-const adminApi = axios.create({ baseURL: "http://localhost:4002" }); // admin-service
+const api = axios.create({
+  baseURL: "http://localhost:3000",
+});
+
+// attach token automatically
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
 
 export default function Doctor() {
   const [doctors, setDoctors] = useState<any[]>([]);
@@ -18,7 +26,7 @@ export default function Doctor() {
   useEffect(() => {
     async function fetchDoctors() {
       try {
-        const { data } = await axios.get("http://localhost:4002/doctors");
+        const { data } = await api.get("/admin/doctors");
         if (Array.isArray(data)) {
           setDoctors(data);
           if (data.length > 0 && !doctorId)
@@ -48,7 +56,7 @@ export default function Doctor() {
 
     setRoomLoading(true);
     try {
-      const { data } = await adminApi.get(`/admin/assigned-rooms`);
+      const { data } = await api.get(`/admin/assigned-rooms`);
 
       // Find the most recent room assignment for this doctor
       const doctorAssignment = data.find(
@@ -135,7 +143,7 @@ export default function Doctor() {
     setResp(null);
     try {
       // Remove room assignment and mark room as available
-      const { data } = await adminApi.post("/admin/leave-room", {
+      const { data } = await api.post("/admin/leave-room", {
         doctorId,
         roomNumber: assignedRoom,
       });
