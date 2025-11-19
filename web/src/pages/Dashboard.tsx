@@ -18,9 +18,7 @@ function formatRoutingKey(key: string = "") {
   return key
     .split(".")
     .map((seg) =>
-      seg
-        .replace(/_/g, " ")
-        .replace(/\b\w/g, (c) => c.toUpperCase())
+      seg.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
     )
     .join(" • ");
 }
@@ -31,14 +29,22 @@ function normalizePayload(payload: any): any {
   if (payload && typeof payload === "object") {
     if (payload.Key && payload.Payload && typeof payload.Payload === "object") {
       const inner = payload.Payload;
-      const flattened: Record<string, any> = { event: formatRoutingKey(String(payload.Key)) };
+      const flattened: Record<string, any> = {
+        event: formatRoutingKey(String(payload.Key)),
+      };
       for (const [k, v] of Object.entries(inner)) {
         flattened[k.charAt(0).toLowerCase() + k.slice(1)] = v;
       }
       return flattened;
-    } else if (payload.key && payload.payload && typeof payload.payload === "object") {
+    } else if (
+      payload.key &&
+      payload.payload &&
+      typeof payload.payload === "object"
+    ) {
       const inner = payload.payload;
-      const flattened: Record<string, any> = { event: formatRoutingKey(payload.key) };
+      const flattened: Record<string, any> = {
+        event: formatRoutingKey(payload.key),
+      };
       for (const [k, v] of Object.entries(inner)) {
         flattened[k.charAt(0).toLowerCase() + k.slice(1)] = v;
       }
@@ -60,7 +66,10 @@ function normalizePayload(payload: any): any {
   }
 
   // normalize special characters
-  s = s.replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replace(/\u200B|\uFEFF/g, "");
+  s = s
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/\u200B|\uFEFF/g, "");
 
   // parse JSON safely
   try {
@@ -94,7 +103,8 @@ function formatValue(v: any): string {
 }
 
 function PayloadView({ payload, depth = 0 }: { payload: any; depth?: number }) {
-  if (!isObject(payload)) return <div className="text-gray-300">{formatValue(payload)}</div>;
+  if (!isObject(payload))
+    return <div className="text-gray-300">{formatValue(payload)}</div>;
 
   const entries = Object.entries(payload as Record<string, any>);
   return (
@@ -126,10 +136,30 @@ function PayloadView({ payload, depth = 0 }: { payload: any; depth?: number }) {
 
 export default function Dashboard() {
   const [services, setServices] = useState<ServiceStatus[]>([
-    { name: "Doctor", url: "http://localhost:4001/health", healthy: false, color: "blue" },
-    { name: "Lab", url: "http://localhost:4003/health", healthy: false, color: "purple" },
-    { name: "Pharmacy", url: "http://localhost:4004/health", healthy: false, color: "green" },
-    { name: "Admin", url: "http://localhost:4002/health", healthy: false, color: "amber" },
+    {
+      name: "Doctor",
+      url: "http://localhost:4001/health",
+      healthy: false,
+      color: "blue",
+    },
+    {
+      name: "Lab",
+      url: "http://localhost:4003/health",
+      healthy: false,
+      color: "purple",
+    },
+    {
+      name: "Pharmacy",
+      url: "http://localhost:4004/health",
+      healthy: false,
+      color: "green",
+    },
+    {
+      name: "Admin",
+      url: "http://localhost:4002/health",
+      healthy: false,
+      color: "amber",
+    },
   ]);
 
   const [events, setEvents] = useState<any[]>([]);
@@ -151,11 +181,15 @@ export default function Dashboard() {
   async function fetchEvents() {
     try {
       const res = await axios.get("http://localhost:4002/events");
-      const validEvents = res.data.filter((e: any) => typeof e === "object" && e !== null);
+      const validEvents = res.data.filter(
+        (e: any) => typeof e === "object" && e !== null
+      );
 
       const unique = new Map();
       for (const e of validEvents) {
-        const key = `${e.routing_key || e.topic || e.event}-${JSON.stringify(e.payload)}`;
+        const key = `${e.routing_key || e.topic || e.event}-${JSON.stringify(
+          e.payload
+        )}`;
         if (!unique.has(key)) unique.set(key, e);
       }
 
@@ -187,13 +221,17 @@ export default function Dashboard() {
           <div
             key={svc.name}
             className={`rounded-xl p-6 shadow-2xl transition-all duration-300 transform hover:scale-[1.02]
-              ${svc.healthy
-                ? "bg-gray-800 border-t-4 border-green-500 hover:border-green-400"
-                : "bg-gray-800 border-t-4 border-red-500 hover:border-red-400"}
+              ${
+                svc.healthy
+                  ? "bg-gray-800 border-t-4 border-green-500 hover:border-green-400"
+                  : "bg-gray-800 border-t-4 border-red-500 hover:border-red-400"
+              }
               border border-gray-700`}
           >
             <h2 className="text-2xl font-bold mb-2 text-white">{svc.name}</h2>
-            <p className="text-sm font-medium text-gray-400 mb-4">Status Indicator</p>
+            <p className="text-sm font-medium text-gray-400 mb-4">
+              Status Indicator
+            </p>
             <p className="text-lg font-semibold">
               <span className={svc.healthy ? "text-green-400" : "text-red-400"}>
                 {svc.healthy ? "ONLINE" : "OFFLINE"}
@@ -215,15 +253,28 @@ export default function Dashboard() {
       <div className="mt-8">
         <h2 className="text-3xl font-bold mb-4 text-black">Live Event Feed</h2>
         <div className="rounded-xl bg-gray-800 p-6 h-[400px] overflow-y-auto shadow-inner border border-gray-700 text-sm font-mono text-gray-300">
-          {events.length === 0 && <p className="text-gray-500">No events yet...</p>}
+          {events.length === 0 && (
+            <p className="text-gray-500">No events yet...</p>
+          )}
           {events.map((e, i) => {
-            const routing = formatRoutingKey(e.routing_key || e.topic || e.event || "");
+            const routing = formatRoutingKey(
+              e.routing_key || e.topic || e.event || ""
+            );
             const payload = normalizePayload(e.payload ?? e.message ?? e.body);
             const eventName = payload.event || routing;
             return (
-              <div key={i} className="mb-3 border-b border-gray-700 pb-3 last:border-b-0">
+              <div
+                key={i}
+                className="mb-3 border-b border-gray-700 pb-3 last:border-b-0"
+              >
                 <div className="flex justify-between items-center">
-                  <strong className={e.direction === "sent" ? "text-yellow-400" : "text-blue-400"}>
+                  <strong
+                    className={
+                      e.direction === "sent"
+                        ? "text-yellow-400"
+                        : "text-blue-400"
+                    }
+                  >
                     {e.direction === "sent" ? "📤 SENT" : "📥 RECV"}
                   </strong>
                   <span className="text-gray-500 text-xs">
@@ -242,4 +293,3 @@ export default function Dashboard() {
     </div>
   );
 }
-

@@ -45,16 +45,17 @@ export default function Doctor() {
 
   const fetchAssignedRoom = async () => {
     if (!doctorId) return;
-    
+
     setRoomLoading(true);
     try {
       const { data } = await adminApi.get(`/admin/assigned-rooms`);
-      
+
       // Find the most recent room assignment for this doctor
       const doctorAssignment = data.find(
-        (assignment: any) => assignment.doctorId?.toString() === doctorId.toString()
+        (assignment: any) =>
+          assignment.doctorId?.toString() === doctorId.toString()
       );
-      
+
       if (doctorAssignment) {
         setAssignedRoom(doctorAssignment.roomNumber);
       } else {
@@ -130,7 +131,7 @@ export default function Doctor() {
       setResp({ error: "No room assigned to leave." });
       return;
     }
-    
+
     setResp(null);
     try {
       // Remove room assignment and mark room as available
@@ -138,10 +139,10 @@ export default function Doctor() {
         doctorId,
         roomNumber: assignedRoom,
       });
-      
+
       setResp(data);
       setAssignedRoom(null); // Clear the assigned room locally
-      
+
       // Refresh the assigned room data
       fetchAssignedRoom();
     } catch (err) {
@@ -160,7 +161,9 @@ export default function Doctor() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {/* Active Doctor Selection */}
         <div className="bg-gray-800 p-6 rounded-xl shadow-lg border border-blue-700">
-          <h2 className="text-xl font-bold text-blue-400 mb-3">Active Doctor</h2>
+          <h2 className="text-xl font-bold text-blue-400 mb-3">
+            Active Doctor
+          </h2>
           <select
             className={inputStyle}
             value={doctorId}
@@ -185,12 +188,18 @@ export default function Doctor() {
         <div className="bg-gray-800 p-6 rounded-xl shadow-lg border border-amber-700">
           <h2 className="text-xl font-bold text-amber-400 mb-3">Leave Room</h2>
           {roomLoading ? (
-            <div className="text-gray-400 text-center py-4">Loading room information...</div>
+            <div className="text-gray-400 text-center py-4">
+              Loading room information...
+            </div>
           ) : assignedRoom ? (
             <div className="space-y-4">
               <div className="text-white text-center">
-                <div className="text-sm text-gray-400 mb-1">Currently Assigned Room</div>
-                <div className="text-2xl font-bold text-amber-300">Room {assignedRoom}</div>
+                <div className="text-sm text-gray-400 mb-1">
+                  Currently Assigned Room
+                </div>
+                <div className="text-2xl font-bold text-amber-300">
+                  Room {assignedRoom}
+                </div>
               </div>
               <button
                 onClick={leaveRoom}
@@ -229,7 +238,9 @@ export default function Doctor() {
             onChange={(e) => setTestType(e.target.value)}
             placeholder="Test Type (Blood, X-Ray)"
           />
-          <div className="mt-8"> {/* Added margin to align buttons */}
+          <div className="mt-8">
+            {" "}
+            {/* Added margin to align buttons */}
             <button
               onClick={orderTest}
               className="bg-red-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-red-500 transition duration-200 shadow-md w-full focus:outline-none focus:ring-2 focus:ring-red-400"
@@ -241,7 +252,9 @@ export default function Doctor() {
 
         {/* Send Prescription Section */}
         <div className="bg-gray-800 p-6 rounded-xl shadow-lg border border-green-700 space-y-4">
-          <h2 className="text-xl font-bold text-green-400">Send Prescription</h2>
+          <h2 className="text-xl font-bold text-green-400">
+            Send Prescription
+          </h2>
           <input
             className={inputStyle}
             value={medicine}
@@ -293,8 +306,7 @@ export default function Doctor() {
                       `Doctor ${resp.event.payload.orderedBy}`}
                   </p>
                   <p className="text-gray-400 text-xs mt-2">
-                    Timestamp:{" "}
-                    {new Date(resp.event.timestamp).toLocaleString()}
+                    Timestamp: {new Date(resp.event.timestamp).toLocaleString()}
                   </p>
                 </>
               )}
@@ -313,8 +325,7 @@ export default function Doctor() {
                       `Doctor ${resp.event.payload.doctorId}`}
                   </p>
                   <p className="text-gray-400 text-xs mt-2">
-                    Timestamp:{" "}
-                    {new Date(resp.event.timestamp).toLocaleString()}
+                    Timestamp: {new Date(resp.event.timestamp).toLocaleString()}
                   </p>
                 </>
               )}

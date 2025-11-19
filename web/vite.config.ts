@@ -5,24 +5,20 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+
+    // ❌ REMOVE route proxies
+    // ❌ Vite must serve these routes as SPA pages
+    // ❌ DO NOT forward them to gateway
+
     proxy: {
-      // only proxy actual API endpoints, not the /doctor route itself
-      "^/doctor/(health|tests|events)": {
-        target: "http://localhost:4001",
-        changeOrigin: true,
-      },
-      "^/admin/(health|events)": {
-        target: "http://localhost:4002",
-        changeOrigin: true,
-      },
-      "^/lab/(health|results|events)": {
-        target: "http://localhost:4003",
-        changeOrigin: true,
-      },
-      "^/pharmacy/(health|prescriptions|events)": {
-        target: "http://localhost:4004",
+      // Only proxy API calls if needed:
+      "/auth": {
+        target: "http://localhost:3000",
         changeOrigin: true,
       },
     },
   },
+
+  // ⬅️ This tells Vite: "Serve index.html for ANY unknown route"
+  appType: "spa",
 });
