@@ -14,7 +14,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* Sidebar */}
       <aside className="w-64 bg-gray-800 p-4 shadow-xl flex flex-col">
         <div className="text-2xl font-extrabold text-blue-400 mb-8 tracking-wider">
-          MicroHealth 
+          MediCore MGMT.
         </div>
         <nav className="space-y-2">
           {navItems.map((item) => (

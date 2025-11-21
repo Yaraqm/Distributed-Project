@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
+import { useAuth } from "../auth/AuthProvider";
 
 type ServiceStatus = {
   name: string;
@@ -135,6 +136,7 @@ function PayloadView({ payload, depth = 0 }: { payload: any; depth?: number }) {
 // -----------------------------------------------------------------
 
 export default function Dashboard() {
+  const { user } = useAuth();
   const [services, setServices] = useState<ServiceStatus[]>([
     {
       name: "Doctor",
@@ -163,6 +165,7 @@ export default function Dashboard() {
   ]);
 
   const [events, setEvents] = useState<any[]>([]);
+  const [restrictedMsg, setRestrictedMsg] = useState(""); // ✅ NEW
 
   async function checkHealth() {
     const updated = await Promise.all(
@@ -211,42 +214,88 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-10">
+      {/* Overlay for restricted access */}
+      {restrictedMsg && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60">
+          <div className="bg-red-50 border border-red-500 text-red-800 rounded-lg px-6 py-4 max-w-md w-[90%] shadow-2xl">
+            <h2 className="text-lg font-semibold mb-2">Restricted Access</h2>
+            <p className="text-sm mb-4">{restrictedMsg}</p>
+            <div className="flex justify-end">
+              <button
+                onClick={() => setRestrictedMsg("")}
+                className="px-4 py-2 rounded-md bg-red-600 text-white text-sm hover:bg-red-500"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <h1 className="text-4xl font-extrabold text-black border-b border-gray-700 pb-4">
         MicroHealth System Dashboard
       </h1>
 
       {/* Services */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {services.map((svc) => (
-          <div
-            key={svc.name}
-            className={`rounded-xl p-6 shadow-2xl transition-all duration-300 transform hover:scale-[1.02]
+        {services.map((svc) => {
+          const allowed =
+            user?.role &&
+            user.role.toLowerCase() === svc.name.toLowerCase(); // role-based access
+
+          const handlePortalClick = (
+            e: React.MouseEvent<HTMLAnchorElement, MouseEvent>
+          ) => {
+            if (!allowed) {
+              e.preventDefault();
+              setRestrictedMsg(
+                `You do not have access to the ${svc.name} portal with your current role.`
+              );
+            }
+          };
+
+          return (
+            <div
+              key={svc.name}
+              className={`rounded-xl p-6 shadow-2xl transition-all duration-300 transform hover:scale-[1.02]
               ${
                 svc.healthy
                   ? "bg-gray-800 border-t-4 border-green-500 hover:border-green-400"
                   : "bg-gray-800 border-t-4 border-red-500 hover:border-red-400"
               }
-              border border-gray-700`}
-          >
-            <h2 className="text-2xl font-bold mb-2 text-white">{svc.name}</h2>
-            <p className="text-sm font-medium text-gray-400 mb-4">
-              Status Indicator
-            </p>
-            <p className="text-lg font-semibold">
-              <span className={svc.healthy ? "text-green-400" : "text-red-400"}>
-                {svc.healthy ? "ONLINE" : "OFFLINE"}
-              </span>
-            </p>
-            <a
-              href={`/${svc.name.toLowerCase()}`}
-              className={`mt-4 inline-block px-4 py-2 text-white rounded-lg transition duration-200 shadow-md 
-                bg-${svc.color}-600 hover:bg-${svc.color}-500 focus:outline-none focus:ring-2 focus:ring-${svc.color}-400 focus:ring-offset-2 focus:ring-offset-gray-900
-                w-full text-center font-bold`}
+              border border-gray-700 ${
+                !allowed ? "opacity-50" : ""
+              }`} // still greyed out when not allowed
             >
-              Open Portal
-            </a>
-          </div>
-        ))}
+              <h2 className="text-2xl font-bold mb-2 text-white">
+                {svc.name}
+              </h2>
+              <p className="text-sm font-medium text-gray-400 mb-4">
+                Status Indicator
+              </p>
+              <p className="text-lg font-semibold">
+                <span
+                  className={
+                    svc.healthy ? "text-green-400" : "text-red-400"
+                  }
+                >
+                  {svc.healthy ? "ONLINE" : "OFFLINE"}
+                </span>
+              </p>
+              <a
+                href={`/${svc.name.toLowerCase()}`}
+                onClick={handlePortalClick} // ✅ show overlay when restricted
+                className={`mt-4 inline-block px-4 py-2 text-white rounded-lg transition duration-200 shadow-md 
+                bg-${svc.color}-600 hover:bg-${svc.color}-500 focus:outline-none focus:ring-2 focus:ring-${svc.color}-400 focus:ring-offset-2 focus:ring-offset-gray-900
+                w-full text-center font-bold ${
+                  !allowed ? "cursor-not-allowed" : ""
+                }`}
+              >
+                Open Portal
+              </a>
+            </div>
+          );
+        })}
       </div>
 
       {/* Event Feed */}
@@ -278,7 +327,9 @@ export default function Dashboard() {
                     {e.direction === "sent" ? "📤 SENT" : "📥 RECV"}
                   </strong>
                   <span className="text-gray-500 text-xs">
-                    {new Date(e.created_at || e.timestamp).toLocaleTimeString()}
+                    {new Date(
+                      e.created_at || e.timestamp
+                    ).toLocaleTimeString()}
                   </span>
                 </div>
                 <p className="text-gray-400 break-words my-1">{eventName}</p>

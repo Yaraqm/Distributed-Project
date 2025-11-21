@@ -21,10 +21,10 @@ const PORT = process.env.PORT || 4001;
 const RABBITMQ_URL =
   process.env.RABBITMQ_URL || "amqp://guest:guest@localhost:5672";
 
-// ✅ Health check
+// Health check
 app.get("/health", (_req, res) => res.json({ service: "doctor", ok: true }));
 
-// ✅ Fetch assigned room for a doctor
+// Fetch assigned room for a doctor
 app.get("/doctor/:id/room", async (req, res) => {
   const { id } = req.params;
   const result = await pool.query(
@@ -35,13 +35,12 @@ app.get("/doctor/:id/room", async (req, res) => {
 });
 
 /* ============================================================================
-   🧬 Order a new lab test (re-allow after fulfillment)
+   Order a new lab test (re-allow after fulfillment)
 ============================================================================ */
-app.post("/tests/order", async (req, res) => {
+async function orderTestHandler(req: express.Request, res: express.Response) {
   try {
     const { patientId, testType, orderedBy } = req.body;
 
-    // 1️⃣ Check if there’s an unfulfilled (pending) test already
     const pending = await pool.query(
       `SELECT 1 FROM lab_tests 
        WHERE patient_id = $1 AND test_type = $2 AND doctor_id = $3 AND result IS NULL
@@ -55,7 +54,6 @@ app.post("/tests/order", async (req, res) => {
         .json({ error: "duplicate_test", message: "Duplicate test. Please enter a new one." });
     }
 
-    // 2️⃣ Proceed with insertion
     const nameResult = await pool.query(
       "SELECT name FROM doctors WHERE id = $1 LIMIT 1",
       [orderedBy]
@@ -80,19 +78,22 @@ app.post("/tests/order", async (req, res) => {
       event: evt,
     });
   } catch (err) {
-    console.error("[doctor] ❌ Error ordering test:", err);
+    console.error("[doctor] Error ordering test:", err);
     res.status(500).json({ error: "Failed to order test" });
   }
-});
+}
+
+// Support both direct service path and gateway-prefixed path
+app.post("/tests/order", orderTestHandler);
+app.post("/doctor/tests/order", orderTestHandler);
 
 /* ============================================================================
-   💊 Create a prescription (re-allow after fulfillment)
+   Create a prescription (re-allow after fulfillment)
 ============================================================================ */
 app.post("/doctor/prescription", async (req, res) => {
   try {
     const { patientId, medicine, dosage, doctorId } = req.body;
 
-    // 1️⃣ Check if an unfulfilled prescription exists
     const unfulfilled = await pool.query(
       `SELECT p.id 
        FROM prescriptions p
@@ -111,7 +112,6 @@ app.post("/doctor/prescription", async (req, res) => {
       });
     }
 
-    // 2️⃣ Insert new prescription
     const nameResult = await pool.query(
       "SELECT name FROM doctors WHERE id = $1 LIMIT 1",
       [doctorId]
@@ -136,13 +136,13 @@ app.post("/doctor/prescription", async (req, res) => {
       event: evt,
     });
   } catch (err) {
-    console.error("[doctor] ❌ Error sending prescription:", err);
+    console.error("[doctor] Error sending prescription:", err);
     res.status(500).json({ error: "Failed to send prescription" });
   }
 });
 
 /* ============================================================================
-   🔔 Subscribers
+   Subscribers
 ============================================================================ */
 async function startDoctorSubscribers() {
   try {
@@ -150,7 +150,7 @@ async function startDoctorSubscribers() {
       RABBITMQ_URL,
       "lab.test.completed",
       async (_key, msg) => {
-        console.log("[doctor] 🧬 received lab result:", msg);
+        console.log("[doctor] received lab result:", msg);
         await logEvent("doctor", "received", "lab.test.completed", msg?.payload || msg || {});
       },
       logEvent
@@ -160,8 +160,13 @@ async function startDoctorSubscribers() {
       RABBITMQ_URL,
       "pharmacy.prescription.fulfilled",
       async (_key, msg) => {
-        console.log("[doctor] 💊 received pharmacy update:", msg);
-        await logEvent("doctor", "received", "pharmacy.prescription.fulfilled", msg?.payload || msg || {});
+        console.log("[doctor] received pharmacy update:", msg);
+        await logEvent(
+          "doctor",
+          "received",
+          "pharmacy.prescription.fulfilled",
+          msg?.payload || msg || {}
+        );
       },
       logEvent
     );
@@ -170,7 +175,7 @@ async function startDoctorSubscribers() {
       RABBITMQ_URL,
       "admin.room.assigned",
       async (_key, msg) => {
-        console.log(`[doctor] 🏥 assigned room ${msg.payload.roomNumber}`);
+        console.log(`[doctor] assigned room ${msg.payload.roomNumber}`);
         await logEvent("doctor", "received", "admin.room.assigned", msg?.payload || msg || {});
       },
       logEvent
@@ -181,7 +186,7 @@ async function startDoctorSubscribers() {
 }
 
 /* ============================================================================
-   ❤️ Heartbeat
+   Heartbeat
 ============================================================================ */
 setInterval(async () => {
   const payload = { status: "alive", time: new Date().toISOString() };
@@ -191,5 +196,4 @@ setInterval(async () => {
 }, 60_000);
 
 startDoctorSubscribers();
-app.listen(PORT, () => console.log(`doctor-service 🩺 running on ${PORT}`));
-
+app.listen(PORT, () => console.log(`doctor-service running on ${PORT}`));

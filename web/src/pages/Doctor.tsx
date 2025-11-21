@@ -87,7 +87,7 @@ export default function Doctor() {
     }
     setResp(null);
     try {
-      const { data } = await api.post("/tests/order", {
+      const { data } = await api.post("/doctor/tests/order", {
         patientId,
         testType,
         orderedBy: doctorId,

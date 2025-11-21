@@ -32,7 +32,7 @@ app.get("/health", (_req, res) => res.json({ service: "admin", ok: true }));
 ============================================================================= */
 
 // Fetch all doctors
-app.get("/doctors", async (_req, res) => {
+app.get("/admin/doctors", async (_req, res) => {
   const result = await pool.query("SELECT * FROM doctors");
   res.json(result.rows);
 });
@@ -144,6 +144,12 @@ app.delete("/admin/doctors/:id", async (req, res) => {
 
 // Fetch all rooms
 app.get("/rooms", async (_req, res) => {
+  const result = await pool.query("SELECT * FROM rooms");
+  res.json(result.rows);
+});
+
+// Alias with /admin prefix so it works through the gateway
+app.get("/admin/rooms", async (_req, res) => {
   const result = await pool.query("SELECT * FROM rooms");
   res.json(result.rows);
 });

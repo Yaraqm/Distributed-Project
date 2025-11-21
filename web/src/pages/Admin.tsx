@@ -18,7 +18,7 @@ function isObject(v: any) {
   return v && typeof v === "object" && !Array.isArray(v);
 }
 function fmtTime(iso?: string) {
-  if (!iso) return "—";
+  if (!iso) return "";
   const d = new Date(iso);
   return isNaN(d.getTime()) ? iso : d.toLocaleString();
 }
@@ -48,9 +48,9 @@ export default function Admin() {
     async function loadData() {
       try {
         const [doctorRes, roomRes, assignedRes] = await Promise.all([
-          axios.get("/admin/doctors"),
-          axios.get("/admin/rooms"),
-          axios.get("/admin/assigned-rooms"),
+          api.get("/admin/doctors"),
+          api.get("/admin/rooms"),
+          api.get("/admin/assigned-rooms"),
         ]);
         setDoctors(Array.isArray(doctorRes.data) ? doctorRes.data : []);
         setRooms(Array.isArray(roomRes.data) ? roomRes.data : []);
@@ -58,7 +58,7 @@ export default function Admin() {
           Array.isArray(assignedRes.data) ? assignedRes.data : []
         );
       } catch (err) {
-        console.error("❌ Error loading admin data:", err);
+        console.error("Error loading admin data:", err);
       }
     }
     loadData();
@@ -74,27 +74,27 @@ export default function Admin() {
     setAssignResp(null);
 
     try {
-      // 1️⃣ Send assignment request
-      const res = await axios.post("/admin/assign-room", {
+      // Send assignment request
+      const res = await api.post("/admin/assign-room", {
         doctorId,
         roomNumber,
       });
 
       setAssignResp(res.data);
 
-      // 2️⃣ Refresh assigned rooms — ensures dropdown updates immediately
-      const assignedRes = await axios.get("/admin/assigned-rooms");
+      // Refresh assigned rooms — ensures dropdown updates immediately
+      const assignedRes = await api.get("/admin/assigned-rooms");
       setAssignedRooms(Array.isArray(assignedRes.data) ? assignedRes.data : []);
 
-      // 3️⃣ Refresh rooms state
-      const roomRes = await axios.get("admin/rooms");
+      // Refresh rooms state
+      const roomRes = await api.get("/admin/rooms");
       setRooms(Array.isArray(roomRes.data) ? roomRes.data : []);
 
-      // 4️⃣ Clear UI fields
+      // Clear UI fields
       setDoctorId("");
       setRoomNumber("");
     } catch (err) {
-      console.error("❌ Error assigning room:", err);
+      console.error("Error assigning room:", err);
       setAssignResp({
         error: "Failed to assign room. See console for details.",
       });
@@ -109,7 +109,7 @@ export default function Admin() {
     }
     setDoctorResp(null);
     try {
-      const res = await axios.post("/admin/doctors", {
+      const res = await api.post("/admin/doctors", {
         name: newName,
         specialty: newSpecialty,
       });
@@ -131,24 +131,24 @@ export default function Admin() {
     setDoctorResp(null);
 
     try {
-      // 1️⃣ Delete doctor
-      const res = await axios.delete(`/admin/doctors/${id}`);
+      // Delete doctor
+      const res = await api.delete(`/admin/doctors/${id}`);
 
-      // 2️⃣ Update doctor list immediately
+      // Update doctor list immediately
       setDoctors((prev) => prev.filter((d) => String(d.id) !== String(id)));
 
-      // 3️⃣ Refresh assigned rooms so FloorPlan updates instantly
-      const assignedRes = await axios.get("/admin/assigned-rooms");
+      // Refresh assigned rooms so FloorPlan updates instantly
+      const assignedRes = await api.get("/admin/assigned-rooms");
       setAssignedRooms(Array.isArray(assignedRes.data) ? assignedRes.data : []);
 
-      // 4️⃣ Refresh rooms (optional but recommended)
-      const roomRes = await axios.get("/admin/rooms");
+      // Refresh rooms (optional but recommended)
+      const roomRes = await api.get("/admin/rooms");
       setRooms(Array.isArray(roomRes.data) ? roomRes.data : []);
 
-      // 5️⃣ Operation response
+      // Operation response
       setDoctorResp(res.data);
 
-      // 6️⃣ Clear selected doctor if needed
+      // Clear selected doctor if needed
       if (String(id) === doctorId) setDoctorId("");
     } catch (err) {
       console.error("Error deleting doctor:", err);
@@ -184,14 +184,14 @@ export default function Admin() {
     if ("error" in data) {
       return (
         <div className="rounded-xl p-4 shadow-inner border bg-red-900/40 border-red-700">
-          <div className="text-red-200 font-medium">❌ {data.error}</div>
+          <div className="text-red-200 font-medium">⚠️ {data.error}</div>
         </div>
       );
     }
     const key = data.event?.key ?? "admin.room.assigned";
     const p = data.event?.payload ?? {};
-    const doc = p.doctorId ?? p.doctor_id ?? "—";
-    const room = p.roomNumber ?? p.room_number ?? "—";
+    const doc = p.doctorId ?? p.doctor_id ?? "";
+    const room = p.roomNumber ?? p.room_number ?? "";
     const at = p.assignedAt ?? p.assigned_at;
 
     return (
@@ -232,7 +232,7 @@ export default function Admin() {
     if (data.error) {
       return (
         <div className="rounded-xl p-4 shadow-inner border bg-red-900/40 border-red-700">
-          <div className="text-red-200 font-medium">❌ {data.error}</div>
+          <div className="text-red-200 font-medium">⚠️ {data.error}</div>
         </div>
       );
     }
@@ -246,8 +246,8 @@ export default function Admin() {
             {isCreate
               ? "✅ Doctor Created"
               : isDelete
-              ? "🗑 Doctor Removed"
-              : "ℹ Operation Result"}
+              ? "✅ Doctor Removed"
+              : "ℹ️ Operation Result"}
           </div>
           <div className="text-xs text-gray-400">
             {fmtTime(p.createdAt || p.deletedAt || new Date().toISOString())}
@@ -280,7 +280,7 @@ export default function Admin() {
   return (
     <div className="space-y-8">
       <h1 className="text-3xl font-extrabold text-black border-b border-gray-700 pb-4">
-        🧾 Admin Portal
+        Admin Portal
       </h1>
 
       {/* --- Add Doctor --- */}
@@ -333,7 +333,9 @@ export default function Admin() {
                   <div>
                     <div className="text-white font-medium">{d.name}</div>
                     {d.specialty && (
-                      <div className="text-gray-400 text-sm">{d.specialty}</div>
+                      <div className="text-gray-400 text-sm">
+                        {d.specialty}
+                      </div>
                     )}
                   </div>
                   <button

@@ -19,7 +19,7 @@ api.interceptors.response.use(
     const status = err.response?.status;
     const path = window.location.pathname;
 
-    // ❗ Only redirect to login if NOT already on login page
+    // Only redirect to login if NOT already on login page
     if (status === 401 && !path.includes("/login")) {
       console.warn("🔐 Token expired — redirecting to login");
 
