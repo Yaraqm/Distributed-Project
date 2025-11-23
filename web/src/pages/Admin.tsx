@@ -3,7 +3,7 @@ import axios from "axios";
 import FloorPlan from "./FloorPlan";
 
 const api = axios.create({
-  baseURL: "http://localhost:3000", // always go through gateway
+  baseURL: "http://localhost:3000",
 });
 
 // auto-attach token
@@ -141,7 +141,7 @@ export default function Admin() {
       const assignedRes = await api.get("/admin/assigned-rooms");
       setAssignedRooms(Array.isArray(assignedRes.data) ? assignedRes.data : []);
 
-      // Refresh rooms (optional but recommended)
+      // Refresh rooms
       const roomRes = await api.get("/admin/rooms");
       setRooms(Array.isArray(roomRes.data) ? roomRes.data : []);
 
@@ -333,9 +333,7 @@ export default function Admin() {
                   <div>
                     <div className="text-white font-medium">{d.name}</div>
                     {d.specialty && (
-                      <div className="text-gray-400 text-sm">
-                        {d.specialty}
-                      </div>
+                      <div className="text-gray-400 text-sm">{d.specialty}</div>
                     )}
                   </div>
                   <button

@@ -26,12 +26,11 @@ export async function publish<T>(
   const exchange = "hms.topic";
   await channel.assertExchange(exchange, "topic", { durable: true });
 
-  // 🧩 Sanitize message so it never has capitalized Key/Payload
+  // Sanitize message
   const safeMessage: any = message || {};
   let cleanPayload: any = {};
 
   if (typeof safeMessage === "object") {
-    // normalize any legacy structure
     if (safeMessage.Key && safeMessage.Payload) {
       cleanPayload = safeMessage.Payload;
     } else if (safeMessage.payload) {
@@ -48,15 +47,20 @@ export async function publish<T>(
     timestamp: new Date().toISOString(),
   };
 
-  // 📨 Publish this clean, normalized object
-  channel.publish(exchange, routingKey, Buffer.from(JSON.stringify(normalized)), {
-    contentType: "application/json",
-    persistent: true,
-  });
+  // Publish clean, normalized object
+  channel.publish(
+    exchange,
+    routingKey,
+    Buffer.from(JSON.stringify(normalized)),
+    {
+      contentType: "application/json",
+      persistent: true,
+    }
+  );
 
   const service = process.env.SERVICE_NAME || "unknown";
 
-  // ✅ Log clean payload
+  // Log clean payload
   if (logEvent) {
     try {
       await logEvent(service, "sent", routingKey, cleanPayload);
@@ -66,7 +70,7 @@ export async function publish<T>(
   }
 }
 
-/** Subscribe to a topic pattern (e.g., "lab.test.requested" or "pharmacy.*") */
+/** Subscribe to a topic pattern */
 export async function subscribe(
   url: string,
   pattern: string,

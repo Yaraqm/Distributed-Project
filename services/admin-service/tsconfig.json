@@ -9,7 +9,7 @@
     "rootDir": "../../",
     "baseUrl": ".",
     "outDir": "dist",
-    "allowImportingTsExtensions": true, // 👈 add it here
+    "allowImportingTsExtensions": true,
     "noEmit": true
   },
   "include": ["src/**/*", "../../common/events/src/**/*"]

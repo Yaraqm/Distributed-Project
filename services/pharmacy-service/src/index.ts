@@ -22,12 +22,12 @@ const RABBITMQ_URL =
   process.env.RABBITMQ_URL || "amqp://guest:guest@localhost:5672";
 
 /* ============================================================================
-   💊 HEALTH CHECK
+   HEALTH CHECK
 ============================================================================ */
 app.get("/health", (_req, res) => res.json({ service: "pharmacy", ok: true }));
 
 /* ============================================================================
-   💊 SUBSCRIBERS
+   SUBSCRIBERS
 ============================================================================ */
 async function startPharmacySubscribers() {
   try {
@@ -44,7 +44,9 @@ async function startPharmacySubscribers() {
              ON CONFLICT (patient_id, doctor_id, medicine, dosage) DO NOTHING`,
             [patientId, doctorId, medicine, dosage]
           );
-          console.log(`[pharmacy] 💾 Stored new prescription for patient ${patientId}`);
+          console.log(
+            `[pharmacy] 💾 Stored new prescription for patient ${patientId}`
+          );
         } catch (err) {
           console.error("[pharmacy] ❌ Failed to insert prescription:", err);
         }
@@ -69,10 +71,10 @@ async function startPharmacySubscribers() {
 }
 
 /* ============================================================================
-   📦 ROUTES
+   ROUTES
 ============================================================================ */
 
-// ✅ Get all pending (unfulfilled) prescriptions (with doctor name)
+// Get all pending (unfulfilled) prescriptions (with doctor name)
 app.get("/pharmacy/pending", async (_req, res) => {
   try {
     const result = await pool.query(`
@@ -90,7 +92,7 @@ app.get("/pharmacy/pending", async (_req, res) => {
   }
 });
 
-// ✅ Fulfill a prescription
+// Fulfill a prescription
 app.post("/pharmacy/fulfill", async (req, res) => {
   const { prescriptionId } = req.body;
   if (!prescriptionId)
@@ -144,7 +146,7 @@ app.post("/pharmacy/fulfill", async (req, res) => {
 });
 
 /* ============================================================================
-   🔁 STOCK STATUS (optional)
+   STOCK STATUS (optional)
 ============================================================================ */
 setInterval(async () => {
   const evt = {
@@ -155,7 +157,7 @@ setInterval(async () => {
 }, 10 * 60_000);
 
 /* ============================================================================
-   🚀 START SERVER
+   START SERVER
 ============================================================================ */
 startPharmacySubscribers();
 app.listen(PORT, () => console.log(`pharmacy-service 💊 running on ${PORT}`));

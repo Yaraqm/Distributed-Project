@@ -49,7 +49,7 @@ export default function Login() {
           Login
         </button>
 
-        {/* NEW SIGNUP LINK */}
+        {/* SIGNUP LINK */}
         <a
           href="/register"
           className="block text-center text-blue-400 hover:text-blue-300"

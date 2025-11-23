@@ -22,12 +22,12 @@ const RABBITMQ_URL =
   process.env.RABBITMQ_URL || "amqp://guest:guest@localhost:5672";
 
 /* =============================================================================
-   🩺 HEALTH CHECK
+   HEALTH CHECK
 ============================================================================= */
 app.get("/health", (_req, res) => res.json({ service: "lab", ok: true }));
 
 /* =============================================================================
-   🧬 SUBSCRIBERS
+   SUBSCRIBERS
 ============================================================================= */
 async function startLabSubscribers() {
   try {
@@ -52,7 +52,7 @@ async function startLabSubscribers() {
             VALUES ($1, $2, $3)
             ON CONFLICT (patient_id, test_type, doctor_id) DO NOTHING`,
             [patientId, testType, orderedBy]
-          );
+          );
 
           console.log(
             `[lab] 🧾 Stored new test (${testType}) for patient ${patientId}, ordered by ${doctorName}`
@@ -64,7 +64,7 @@ async function startLabSubscribers() {
       logEvent
     );
 
-    // 🔸 Optional: listen for doctor heartbeat
+    // Listen for doctor heartbeat
     await mq.subscribe(
       RABBITMQ_URL,
       "doctor.heartbeat",
@@ -81,10 +81,10 @@ async function startLabSubscribers() {
 }
 
 /* =============================================================================
-   🧪 ROUTES
+   ROUTES
 ============================================================================= */
 
-// ✅ Fetch all pending lab tests (with doctor name)
+// Fetch all pending lab tests (with doctor name)
 app.get("/lab/tests/pending", async (_req, res) => {
   try {
     const result = await pool.query(
@@ -101,7 +101,7 @@ app.get("/lab/tests/pending", async (_req, res) => {
   }
 });
 
-// ✅ Publish completed test and update DB
+// Publish completed test and update DB
 app.post("/lab/result", async (req, res) => {
   const { patientId, result } = req.body;
   if (!patientId || !result)
@@ -122,7 +122,9 @@ app.post("/lab/result", async (req, res) => {
     );
 
     if (testQuery.rows.length === 0)
-      return res.status(404).json({ error: "No pending test found for patient" });
+      return res
+        .status(404)
+        .json({ error: "No pending test found for patient" });
 
     const { id, test_type, doctor_id, doctor_name } = testQuery.rows[0];
 
@@ -157,7 +159,7 @@ app.post("/lab/result", async (req, res) => {
   }
 });
 
-// ✅ Optional: view completed tests
+// View completed tests
 app.get("/lab/tests/completed", async (_req, res) => {
   try {
     const result = await pool.query(
@@ -175,7 +177,7 @@ app.get("/lab/tests/completed", async (_req, res) => {
 });
 
 /* =============================================================================
-   📦 PERIODIC EVENTS (Inventory Example)
+   PERIODIC EVENTS
 ============================================================================= */
 setInterval(async () => {
   const evt = {
@@ -189,7 +191,7 @@ setInterval(async () => {
 }, 5 * 60_000);
 
 /* =============================================================================
-   🚀 START SERVER
+   START SERVER
 ============================================================================= */
 startLabSubscribers();
 app.listen(PORT, () => console.log(`lab-service 🧪 running on ${PORT}`));

@@ -23,12 +23,12 @@ const RABBITMQ_URL =
   process.env.RABBITMQ_URL || "amqp://guest:guest@localhost:5672";
 
 /* =============================================================================
-   🩺 HEALTH CHECK
+   HEALTH CHECK
 ============================================================================= */
 app.get("/health", (_req, res) => res.json({ service: "admin", ok: true }));
 
 /* =============================================================================
-   👨‍⚕ DOCTOR MANAGEMENT
+   DOCTOR MANAGEMENT
 ============================================================================= */
 
 // Fetch all doctors
@@ -68,7 +68,7 @@ app.post("/admin/doctors", async (req, res) => {
   }
 });
 
-// 🗑️ Remove a doctor — merged improved version
+// Remove a doctor merged improved version
 app.delete("/admin/doctors/:id", async (req, res) => {
   const id = String(req.params.id || "");
   if (!id) return res.status(400).json({ error: "id is required" });
@@ -77,7 +77,7 @@ app.delete("/admin/doctors/:id", async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    // 1️⃣ Free rooms occupied by this doctor
+    // Free rooms occupied by this doctor
     await client.query(
       `UPDATE rooms r
          SET is_available = TRUE
@@ -89,13 +89,13 @@ app.delete("/admin/doctors/:id", async (req, res) => {
       [id]
     );
 
-    // 2️⃣ Delete room assignments for this doctor
+    // Delete room assignments for this doctor
     await client.query(
       `DELETE FROM room_assignments WHERE doctor_id::TEXT = $1`,
       [id]
     );
 
-    // 3️⃣ Delete doctor (supports id or doctor_id legacy)
+    // Delete doctor (supports id or doctor_id legacy)
     let result = await client.query(
       `DELETE FROM doctors WHERE id::TEXT = $1 RETURNING id, name, specialty`,
       [id]
@@ -139,7 +139,7 @@ app.delete("/admin/doctors/:id", async (req, res) => {
 });
 
 /* =============================================================================
-   🏥 ROOM MANAGEMENT
+   ROOM MANAGEMENT
 ============================================================================= */
 
 // Fetch all rooms
@@ -190,7 +190,9 @@ app.post("/admin/assign-room", async (req, res) => {
 
     const room = roomCheck.rows[0];
     if (!room.is_available)
-      return res.status(400).json({ error: `Room ${roomNumber} is already occupied` });
+      return res
+        .status(400)
+        .json({ error: `Room ${roomNumber} is already occupied` });
 
     const doctorCheck = await pool.query(
       "SELECT * FROM doctors WHERE id::TEXT = $1",
@@ -198,17 +200,22 @@ app.post("/admin/assign-room", async (req, res) => {
     );
 
     if (doctorCheck.rows.length === 0)
-      return res.status(404).json({ error: `Doctor with ID ${doctorId} not found` });
+      return res
+        .status(404)
+        .json({ error: `Doctor with ID ${doctorId} not found` });
 
-    await pool.query("DELETE FROM room_assignments WHERE room_number = $1", [roomNumber]);
+    await pool.query("DELETE FROM room_assignments WHERE room_number = $1", [
+      roomNumber,
+    ]);
     await pool.query(
       `INSERT INTO room_assignments (doctor_id, room_number, assigned_at)
        VALUES ($1, $2, NOW())`,
       [doctorId, roomNumber]
     );
-    await pool.query("UPDATE rooms SET is_available = false WHERE room_number = $1", [
-      roomNumber,
-    ]);
+    await pool.query(
+      "UPDATE rooms SET is_available = false WHERE room_number = $1",
+      [roomNumber]
+    );
 
     const evt = {
       key: "admin.room.assigned",
@@ -259,9 +266,10 @@ app.post("/admin/leave-room", async (req, res) => {
           .json({ error: "No room assignment found for this doctor and room" });
       }
 
-      await client.query("UPDATE rooms SET is_available = true WHERE room_number = $1", [
-        roomNumber,
-      ]);
+      await client.query(
+        "UPDATE rooms SET is_available = true WHERE room_number = $1",
+        [roomNumber]
+      );
 
       const doctorResult = await client.query(
         "SELECT name FROM doctors WHERE id::TEXT = $1",
@@ -315,7 +323,7 @@ app.post("/admin/reset-rooms", async (_req, res) => {
 });
 
 /* =============================================================================
-   📜 EVENT LOGS
+   EVENT LOGS
 ============================================================================= */
 app.get("/events", async (_req, res) => {
   try {
@@ -346,7 +354,7 @@ app.get("/events", async (_req, res) => {
 });
 
 /* =============================================================================
-   🧠 SUBSCRIBERS
+   SUBSCRIBERS
 ============================================================================= */
 async function startAdminSubscribers() {
   try {
@@ -376,7 +384,7 @@ async function startAdminSubscribers() {
 }
 
 /* =============================================================================
-   🕒 PERIODIC EVENTS
+   PERIODIC EVENTS
 ============================================================================= */
 setInterval(async () => {
   const evt = {
@@ -402,7 +410,7 @@ setInterval(async () => {
 }, 60 * 60_000);
 
 /* =============================================================================
-   🚀 START SERVER
+   START SERVER
 ============================================================================= */
 startAdminSubscribers();
 app.listen(PORT, () => console.log(`admin-service 🧾 running on ${PORT}`));

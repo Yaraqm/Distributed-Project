@@ -24,7 +24,7 @@ export default function Register() {
   };
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const passwordRegex = /^(?=.*\d).{6,}$/; // at least 6 chars, at least 1 digit
+  const passwordRegex = /^(?=.*\d).{6,}$/;
 
   async function submit(e: any) {
     e.preventDefault();
@@ -180,4 +180,3 @@ export default function Register() {
     </div>
   );
 }
-

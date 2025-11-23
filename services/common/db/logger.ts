@@ -17,7 +17,7 @@ export default async function logEvent(
         ? cleanDirection
         : "sent";
 
-    // ✅ Normalize keys to lowercase for consistent dashboard display
+    // Normalize keys to lowercase for consistent dashboard display
     const normalizeKeys = (obj: Record<string, any>): Record<string, any> => {
       if (!obj || typeof obj !== "object") return obj;
       return Object.fromEntries(
@@ -28,10 +28,9 @@ export default async function logEvent(
       );
     };
 
-
     const normalizedPayload = normalizeKeys(payload ?? {});
 
-    // ✅ Avoid double-stringifying: only stringify once for DB storage
+    // Stringify once for DB storage
     const safePayload = JSON.stringify(normalizedPayload);
 
     const query = `

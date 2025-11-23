@@ -15,7 +15,7 @@ function isObject(v: any) {
 }
 
 function formatRoutingKey(key: string = "") {
-  // doctor.heartbeat -> Doctor • Heartbeat
+  // doctor.heartbeat
   return key
     .split(".")
     .map((seg) =>
@@ -24,7 +24,7 @@ function formatRoutingKey(key: string = "") {
     .join(" • ");
 }
 
-/** Smarter normalization — handles nested {Key, Payload} and stringified JSON */
+/** Normalization — handles nested {Key, Payload} and stringified JSON */
 function normalizePayload(payload: any): any {
   // Flatten already-object {Key, Payload} forms
   if (payload && typeof payload === "object") {
@@ -75,9 +75,8 @@ function normalizePayload(payload: any): any {
   // parse JSON safely
   try {
     const parsed = JSON.parse(s);
-    return normalizePayload(parsed); // 🔁 recursively normalize if it’s nested
+    return normalizePayload(parsed);
   } catch {
-    // try again for double-encoded JSON like "{\"Key\":\"...\"}"
     try {
       const unescaped = s
         .replace(/\\"/g, '"')
@@ -133,7 +132,6 @@ function PayloadView({ payload, depth = 0 }: { payload: any; depth?: number }) {
     </div>
   );
 }
-// -----------------------------------------------------------------
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -240,8 +238,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {services.map((svc) => {
           const allowed =
-            user?.role &&
-            user.role.toLowerCase() === svc.name.toLowerCase(); // role-based access
+            user?.role && user.role.toLowerCase() === svc.name.toLowerCase(); // role-based access
 
           const handlePortalClick = (
             e: React.MouseEvent<HTMLAnchorElement, MouseEvent>
@@ -263,30 +260,28 @@ export default function Dashboard() {
                   ? "bg-gray-800 border-t-4 border-green-500 hover:border-green-400"
                   : "bg-gray-800 border-t-4 border-red-500 hover:border-red-400"
               }
-              border border-gray-700 ${
-                !allowed ? "opacity-50" : ""
-              }`} // still greyed out when not allowed
+              border border-gray-700 ${!allowed ? "opacity-50" : ""}`} // still greyed out when not allowed
             >
-              <h2 className="text-2xl font-bold mb-2 text-white">
-                {svc.name}
-              </h2>
+              <h2 className="text-2xl font-bold mb-2 text-white">{svc.name}</h2>
               <p className="text-sm font-medium text-gray-400 mb-4">
                 Status Indicator
               </p>
               <p className="text-lg font-semibold">
                 <span
-                  className={
-                    svc.healthy ? "text-green-400" : "text-red-400"
-                  }
+                  className={svc.healthy ? "text-green-400" : "text-red-400"}
                 >
                   {svc.healthy ? "ONLINE" : "OFFLINE"}
                 </span>
               </p>
               <a
                 href={`/${svc.name.toLowerCase()}`}
-                onClick={handlePortalClick} // ✅ show overlay when restricted
+                onClick={handlePortalClick}
                 className={`mt-4 inline-block px-4 py-2 text-white rounded-lg transition duration-200 shadow-md 
-                bg-${svc.color}-600 hover:bg-${svc.color}-500 focus:outline-none focus:ring-2 focus:ring-${svc.color}-400 focus:ring-offset-2 focus:ring-offset-gray-900
+                bg-${svc.color}-600 hover:bg-${
+                  svc.color
+                }-500 focus:outline-none focus:ring-2 focus:ring-${
+                  svc.color
+                }-400 focus:ring-offset-2 focus:ring-offset-gray-900
                 w-full text-center font-bold ${
                   !allowed ? "cursor-not-allowed" : ""
                 }`}
@@ -327,9 +322,7 @@ export default function Dashboard() {
                     {e.direction === "sent" ? "📤 SENT" : "📥 RECV"}
                   </strong>
                   <span className="text-gray-500 text-xs">
-                    {new Date(
-                      e.created_at || e.timestamp
-                    ).toLocaleTimeString()}
+                    {new Date(e.created_at || e.timestamp).toLocaleTimeString()}
                   </span>
                 </div>
                 <p className="text-gray-400 break-words my-1">{eventName}</p>

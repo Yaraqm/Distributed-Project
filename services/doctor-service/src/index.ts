@@ -35,7 +35,7 @@ app.get("/doctor/:id/room", async (req, res) => {
 });
 
 /* ============================================================================
-   Order a new lab test (re-allow after fulfillment)
+   Order a new lab test
 ============================================================================ */
 async function orderTestHandler(req: express.Request, res: express.Response) {
   try {
@@ -51,7 +51,10 @@ async function orderTestHandler(req: express.Request, res: express.Response) {
     if (pending.rows.length > 0) {
       return res
         .status(409)
-        .json({ error: "duplicate_test", message: "Duplicate test. Please enter a new one." });
+        .json({
+          error: "duplicate_test",
+          message: "Duplicate test. Please enter a new one.",
+        });
     }
 
     const nameResult = await pool.query(
@@ -88,7 +91,7 @@ app.post("/tests/order", orderTestHandler);
 app.post("/doctor/tests/order", orderTestHandler);
 
 /* ============================================================================
-   Create a prescription (re-allow after fulfillment)
+   Create a prescription
 ============================================================================ */
 app.post("/doctor/prescription", async (req, res) => {
   try {
@@ -108,7 +111,8 @@ app.post("/doctor/prescription", async (req, res) => {
     if (unfulfilled.rows.length > 0) {
       return res.status(409).json({
         error: "duplicate_prescription",
-        message: "Duplicate prescription. Please modify or fulfill existing one.",
+        message:
+          "Duplicate prescription. Please modify or fulfill existing one.",
       });
     }
 
@@ -151,7 +155,12 @@ async function startDoctorSubscribers() {
       "lab.test.completed",
       async (_key, msg) => {
         console.log("[doctor] received lab result:", msg);
-        await logEvent("doctor", "received", "lab.test.completed", msg?.payload || msg || {});
+        await logEvent(
+          "doctor",
+          "received",
+          "lab.test.completed",
+          msg?.payload || msg || {}
+        );
       },
       logEvent
     );
@@ -176,7 +185,12 @@ async function startDoctorSubscribers() {
       "admin.room.assigned",
       async (_key, msg) => {
         console.log(`[doctor] assigned room ${msg.payload.roomNumber}`);
-        await logEvent("doctor", "received", "admin.room.assigned", msg?.payload || msg || {});
+        await logEvent(
+          "doctor",
+          "received",
+          "admin.room.assigned",
+          msg?.payload || msg || {}
+        );
       },
       logEvent
     );

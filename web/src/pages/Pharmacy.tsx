@@ -118,7 +118,7 @@ export default function Pharmacy() {
         </button>
       </div>
 
-      {/* ✅ Friendly result display */}
+      {/* Result display */}
       {resp && !resp.error && (
         <div className="rounded-xl p-4 shadow-inner border max-w-lg bg-gray-900 border-gray-700">
           <h3 className="text-lg font-medium text-green-400 mb-2">

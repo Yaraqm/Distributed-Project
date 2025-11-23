@@ -7,7 +7,7 @@ import "dotenv/config";
 const app = express();
 const proxy = httpProxy.createProxyServer({});
 
-// FIX: parse JSON for all routes
+//parse JSON for all routes
 app.use(express.json());
 
 // CORS
@@ -39,11 +39,11 @@ proxy.on("proxyReq", (proxyReq, req) => {
   if (req.body && req.method !== "GET") {
     const bodyData = JSON.stringify(req.body);
 
-    // **IMPORTANT FIX** → Only set headers BEFORE writing body
+    // Only set headers before writing body
     proxyReq.setHeader("Content-Type", "application/json");
     proxyReq.setHeader("Content-Length", Buffer.byteLength(bodyData));
 
-    // Write body BEFORE the request streams
+    // Write body before the request streams
     proxyReq.write(bodyData);
   }
 });
